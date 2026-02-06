@@ -42,8 +42,9 @@ const commands = {
   <span class="highlight">help</span>          - Show this help message
   <span class="highlight">about</span>         - About me
   <span class="highlight">contact</span>       - Contact information
-  <span class="highlight">goto &lt;url&gt;</span>    - Open a link (github, email, blog)
+  <span class="highlight">goto &lt;url&gt;</span>    - Open a link (github, email)
   <span class="highlight">puzzle &lt;t&gt;</span>    - Decrypt a secret message
+  <span class="highlight">game &lt;name&gt;</span>   - Play games (guess, rps)
   <span class="highlight">stats</span>         - Show visitor statistics
   <span class="highlight">clear</span>         - Clear the terminal
   <span class="highlight">date</span>          - Show current date and time
@@ -143,8 +144,114 @@ Available destinations: ${Object.keys(links).join(', ')}`;
             return `<span class="error">Unknown destination: ${dest}</span>
 Available destinations: ${Object.keys(links).join(', ')}`;
         }
+    },
+
+    game: (args) => {
+        if (!args || args.length === 0) {
+            return `<span class="error">Usage: game &lt;name&gt;</span>
+Available games: guess, rps`;
+        }
+
+        const gameName = args[0].toLowerCase();
+
+        if (gameName === 'guess') {
+            // Start guess game
+            gameState.active = true;
+            gameState.type = 'guess';
+            gameState.target = Math.floor(Math.random() * 100) + 1;
+            gameState.attempts = 0;
+            return `
+<span class="success">🎮 Guess the Number!</span>
+<span class="info">──────────────────────────────────────</span>
+
+I'm thinking of a number between <span class="highlight">1</span> and <span class="highlight">100</span>.
+Type your guess and press Enter.
+Type '<span class="highlight">quit</span>' to exit the game.
+`;
+        }
+
+        if (gameName === 'rps') {
+            // Start RPS game
+            gameState.active = true;
+            gameState.type = 'rps';
+            return `
+<span class="success">🎮 Rock Paper Scissors!</span>
+<span class="info">──────────────────────────────────────</span>
+
+Type <span class="highlight">rock</span>, <span class="highlight">paper</span>, or <span class="highlight">scissors</span> to play.
+Type '<span class="highlight">quit</span>' to exit the game.
+`;
+        }
+
+        return `<span class="error">Unknown game: ${gameName}</span>
+Available games: guess, rps`;
     }
 };
+
+// Game state
+let gameState = {
+    active: false,
+    type: null,
+    target: null,
+    attempts: 0
+};
+
+// Process game input
+function processGameInput(input) {
+    const trimmed = input.trim().toLowerCase();
+
+    if (trimmed === 'quit') {
+        gameState.active = false;
+        return `<span class="info">Game ended. Thanks for playing!</span>`;
+    }
+
+    if (gameState.type === 'guess') {
+        const num = parseInt(trimmed);
+        if (isNaN(num)) {
+            return `<span class="error">Please enter a number!</span>`;
+        }
+        gameState.attempts++;
+
+        if (num === gameState.target) {
+            gameState.active = false;
+            return `<span class="success">🎉 Correct! The number was ${gameState.target}!</span>
+You got it in <span class="highlight">${gameState.attempts}</span> attempts.`;
+        } else if (num < gameState.target) {
+            return `<span class="highlight">📈 Too low!</span> Try again.`;
+        } else {
+            return `<span class="highlight">📉 Too high!</span> Try again.`;
+        }
+    }
+
+    if (gameState.type === 'rps') {
+        const choices = ['rock', 'paper', 'scissors'];
+        if (!choices.includes(trimmed)) {
+            return `<span class="error">Invalid choice!</span> Type rock, paper, or scissors.`;
+        }
+
+        const computerChoice = choices[Math.floor(Math.random() * 3)];
+        const emojis = { rock: '🪨', paper: '📄', scissors: '✂️' };
+
+        let result;
+        if (trimmed === computerChoice) {
+            result = `<span class="info">It's a tie!</span>`;
+        } else if (
+            (trimmed === 'rock' && computerChoice === 'scissors') ||
+            (trimmed === 'paper' && computerChoice === 'rock') ||
+            (trimmed === 'scissors' && computerChoice === 'paper')
+        ) {
+            result = `<span class="success">You win! 🎉</span>`;
+        } else {
+            result = `<span class="error">You lose! 😢</span>`;
+        }
+
+        return `You: ${emojis[trimmed]} vs Computer: ${emojis[computerChoice]}
+${result}
+Play again or type '<span class="highlight">quit</span>' to exit.`;
+    }
+
+    return '';
+}
 
 // State
 let currentInput = '';
@@ -223,6 +330,15 @@ function executeCommand(input) {
 
     // If empty, just show new prompt
     if (!trimmed) {
+        currentInput = '';
+        updateInputDisplay();
+        return;
+    }
+
+    // If in game mode, process game input
+    if (gameState.active) {
+        const result = processGameInput(trimmed);
+        if (result) appendOutput(result);
         currentInput = '';
         updateInputDisplay();
         return;
