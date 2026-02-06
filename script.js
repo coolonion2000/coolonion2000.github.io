@@ -69,9 +69,8 @@ I believe in the power of technology to solve real-world problems.
 <span class="success">Contact Information</span>
 <span class="info">──────────────────────────────────────</span>
 
-<span class="highlight">GitHub:</span>   <span class="link" onclick="window.open('https://github.com/coolonion2000')">https://github.com/coolonion2000</span>
-<span class="highlight">Email:</span>    your-email@example.com
-<span class="highlight">Twitter:</span>  @coolonion2000
+<span class="highlight">GitHub:</span>   <span class="link" onclick="window.open('https://coolonion2000.github.io')">https://coolonion2000.github.io</span>
+<span class="highlight">Email:</span>    coolonion2000@outlook.com
 
 Type '<span class="highlight">goto github</span>' or '<span class="highlight">goto email</span>' to open directly.
 `,
@@ -127,10 +126,8 @@ Available topics: tantan`;
 
     goto: (args) => {
         const links = {
-            github: 'https://github.com/coolonion2000',
-            email: 'mailto:your-email@example.com',
-            blog: 'https://blog.coolonion.dev',
-            twitter: 'https://twitter.com/coolonion2000'
+            github: 'https://coolonion2000.github.io',
+            email: 'mailto:coolonion2000@outlook.com'
         };
 
         if (!args || args.length === 0) {
