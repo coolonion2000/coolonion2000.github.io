@@ -185,6 +185,11 @@ Type '<span class="highlight">quit</span>' to exit the game.
 
         return `<span class="error">Unknown game: ${gameName}</span>
 Available games: guess, rps`;
+    },
+
+    sl: () => {
+        runSl();
+        return '';
     }
 };
 
@@ -251,6 +256,83 @@ Play again or type '<span class="highlight">quit</span>' to exit.`;
     }
 
     return '';
+}
+
+// SL Train ASCII Art
+const trainFrames = [
+    `      ====        ________                ___________
+  _D _|  |_______/        \\__I_I_____===__|_________|
+   |(_)---  |   H\\________/ |   |        =|___ ___|
+   /     |  |   H  |  |     |   |         ||_| |_||
+  |      |  |   H  |__--------------------| [___] |
+  | ________|___H__/__|_____/[][]~\\_______|       |
+  |/ |   |-----------I_____I [][]/LI______|_______|____
+=/ |___________|=-O=====O=====O=====O      \\_/      \\__`,
+    `       ====        ________                ___________
+   _D _|  |_______/        \\__I_I_____===__|_________|
+    |(_)---  |   H\\________/ |   |        =|___ ___|
+    /     |  |   H  |  |     |   |         ||_| |_||
+   |      |  |   H  |__--------------------| [___] |
+   | ________|___H__/__|_____/[][]~\\_______|       |
+   |/ |   |-----------I_____I [][]/LI______|_______|____
+ =/ |___________|=-O=====O=====O=====O      \\_/      \\__`
+];
+
+let slAnimating = false;
+
+function runSl() {
+    if (slAnimating) return;
+    slAnimating = true;
+
+    const terminal = document.getElementById('terminal');
+    const overlay = document.createElement('div');
+    overlay.id = 'sl-overlay';
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: #0c0c0c;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        overflow: hidden;
+        font-family: monospace;
+    `;
+
+    const train = document.createElement('pre');
+    train.style.cssText = `
+        color: #00ff00;
+        font-size: 14px;
+        line-height: 1.2;
+        white-space: pre;
+        position: absolute;
+        right: -600px;
+    `;
+
+    overlay.appendChild(train);
+    document.body.appendChild(overlay);
+
+    let position = -600;
+    let frame = 0;
+    const speed = 15;
+
+    const animate = () => {
+        train.textContent = trainFrames[frame % trainFrames.length];
+        train.style.right = position + 'px';
+        position += speed;
+        frame++;
+
+        if (position < window.innerWidth + 600) {
+            requestAnimationFrame(animate);
+        } else {
+            overlay.remove();
+            slAnimating = false;
+        }
+    };
+
+    animate();
 }
 
 // State
