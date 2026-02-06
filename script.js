@@ -379,6 +379,22 @@ function finishBoot() {
     }, 300);
 }
 
+function skipBoot() {
+    // Hide loading screen immediately
+    const loadingScreen = document.getElementById('loading-screen');
+    loadingScreen.style.display = 'none';
+
+    // Show terminal immediately
+    const terminal = document.getElementById('terminal');
+    terminal.classList.remove('hidden');
+
+    // Show welcome message
+    appendOutput(welcomeMessage);
+
+    // Focus hidden input
+    focusInput();
+}
+
 // ========================================
 // Terminal Functions
 // ========================================
@@ -480,7 +496,21 @@ function focusInput() {
 // Event Listeners
 // ========================================
 document.addEventListener('DOMContentLoaded', () => {
-    bootSequence();
+    // Check if we should show boot sequence
+    const lastVisit = localStorage.getItem('lastVisit');
+    const now = Date.now();
+    const oneHour = 60 * 60 * 1000; // 1 hour in milliseconds
+
+    if (lastVisit && (now - parseInt(lastVisit)) < oneHour) {
+        // Skip boot sequence, go directly to terminal
+        skipBoot();
+    } else {
+        // Show boot sequence
+        bootSequence();
+    }
+
+    // Update last visit time
+    localStorage.setItem('lastVisit', now.toString());
 
     const hiddenInput = document.getElementById('hidden-input');
 
