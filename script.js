@@ -149,7 +149,7 @@ Available destinations: ${Object.keys(links).join(', ')}`;
     game: (args) => {
         if (!args || args.length === 0) {
             return `<span class="error">Usage: game &lt;name&gt;</span>
-Available games: guess, rps`;
+Available games: guess, rps, wordle, hangman`;
         }
 
         const gameName = args[0].toLowerCase();
@@ -183,8 +183,66 @@ Type '<span class="highlight">quit</span>' to exit the game.
 `;
         }
 
+        if (gameName === 'wordle') {
+            // Start Wordle game
+            gameState.active = true;
+            gameState.type = 'wordle';
+            gameState.target = wordleWords[Math.floor(Math.random() * wordleWords.length)];
+            gameState.attempts = 0;
+            gameState.maxAttempts = 6;
+            gameState.guesses = [];
+            return `
+<span class="success">🟩 WORDLE</span>
+<span class="info">──────────────────────────────────────</span>
+
+Guess the 5-letter word! You have <span class="highlight">6</span> attempts.
+🟩 = correct letter & position
+🟨 = correct letter, wrong position
+⬛ = letter not in word
+
+Type your 5-letter guess and press Enter.
+Type '<span class="highlight">quit</span>' to exit the game.
+`;
+        }
+
+        if (gameName === 'hangman') {
+            // Start Hangman game
+            gameState.active = true;
+            gameState.type = 'hangman';
+            gameState.target = hangmanWords[Math.floor(Math.random() * hangmanWords.length)];
+            gameState.guessedLetters = [];
+            gameState.wrongGuesses = 0;
+            gameState.maxWrong = 6;
+            return `
+<span class="success">☠️ HANGMAN</span>
+<span class="info">──────────────────────────────────────</span>
+
+${getHangmanDisplay()}
+
+Type a single letter to guess.
+Type '<span class="highlight">quit</span>' to exit the game.
+`;
+        }
+
+        if (gameName === 'maze') {
+            // Start Maze game
+            gameState.active = true;
+            gameState.type = 'maze';
+            gameState.mazeLevel = 0;
+            initMaze();
+            return `
+<span class="success">🏃 MAZE RUNNER</span>
+<span class="info">──────────────────────────────────────</span>
+
+${getMazeDisplay()}
+
+Use <span class="highlight">W/A/S/D</span> to move. Reach <span class="success">E</span> (Exit) to win!
+Type '<span class="highlight">quit</span>' to exit the game.
+`;
+        }
+
         return `<span class="error">Unknown game: ${gameName}</span>
-Available games: guess, rps`;
+Available games: guess, rps, wordle, hangman, maze`;
     },
 
     sl: () => {
@@ -193,13 +251,229 @@ Available games: guess, rps`;
     }
 };
 
+// Word lists for games
+const wordleWords = [
+    'apple', 'beach', 'brave', 'chair', 'dance', 'earth', 'flame', 'grape',
+    'heart', 'juice', 'knife', 'light', 'magic', 'night', 'ocean', 'peace',
+    'queen', 'river', 'smile', 'stone', 'storm', 'sweet', 'think', 'tiger',
+    'water', 'world', 'young', 'cloud', 'dream', 'field', 'ghost', 'green',
+    'happy', 'house', 'learn', 'money', 'music', 'north', 'plant', 'power',
+    'pride', 'quick', 'round', 'sleep', 'smart', 'sound', 'space', 'speed',
+    'sport', 'stand', 'start', 'store', 'study', 'table', 'train', 'trust',
+    'voice', 'watch', 'white', 'write', 'brain', 'chess', 'coral', 'crisp'
+];
+
+const hangmanWords = [
+    'javascript', 'programming', 'developer', 'computer', 'algorithm',
+    'function', 'variable', 'database', 'terminal', 'keyboard',
+    'software', 'hardware', 'internet', 'website', 'browser',
+    'github', 'coding', 'python', 'linux', 'server'
+];
+
 // Game state
 let gameState = {
     active: false,
     type: null,
     target: null,
-    attempts: 0
+    attempts: 0,
+    maxAttempts: 0,
+    guesses: [],
+    guessedLetters: [],
+    wrongGuesses: 0,
+    maxWrong: 6,
+    // Maze
+    mazeLevel: 0,
+    mazeMap: null,
+    playerX: 0,
+    playerY: 0,
+    exitX: 0,
+    exitY: 0
 };
+
+// Hangman display helper
+function getHangmanDisplay() {
+    const stages = [
+        `
+                + --- +
+  |   |
+      |
+      |
+      |
+      |
+=========`,
+        `
+  +---+
+  |   |
+  O   |
+      |
+      |
+      |
+=========`,
+        `
+  +---+
+  |   |
+  O   |
+  |   |
+      |
+      |
+=========`,
+        `
+  +---+
+  |   |
+  O   |
+ /|   |
+      |
+      |
+=========`,
+        `
+  +---+
+  |   |
+  O   |
+ /|\\  |
+      |
+      |
+=========`,
+        `
+  +---+
+  |   |
+  O   |
+ /|\\  |
+ /    |
+      |
+=========`,
+        `
+  +---+
+  |   |
+  O   |
+ /|\\  |
+ / \\  |
+      |
+=========`
+    ];
+
+    const word = gameState.target;
+    const display = word.split('').map(c =>
+        gameState.guessedLetters.includes(c) ? c : '_'
+    ).join(' ');
+
+    const wrongLetters = gameState.guessedLetters.filter(c => !word.includes(c));
+
+    return `<span class="info">${stages[gameState.wrongGuesses]}</span>
+
+Word: <span class="highlight">${display}</span>
+Wrong: <span class="error">${wrongLetters.join(', ') || 'none'}</span>
+Attempts left: ${gameState.maxWrong - gameState.wrongGuesses}`;
+}
+
+// Wordle result helper
+function getWordleResult(guess) {
+    const target = gameState.target;
+    let result = [];
+    let targetArr = target.split('');
+    let guessArr = guess.split('');
+
+    // First pass: mark correct positions (green)
+    for (let i = 0; i < 5; i++) {
+        if (guessArr[i] === targetArr[i]) {
+            result[i] = '🟩';
+            targetArr[i] = null;
+            guessArr[i] = null;
+        }
+    }
+
+    // Second pass: mark wrong positions (yellow) or not in word (black)
+    for (let i = 0; i < 5; i++) {
+        if (guessArr[i] === null) continue;
+
+        const idx = targetArr.indexOf(guessArr[i]);
+        if (idx !== -1) {
+            result[i] = '🟨';
+            targetArr[idx] = null;
+        } else {
+            result[i] = '⬛';
+        }
+    }
+
+    return result.join('');
+}
+
+// Maze maps (# = wall, . = path, S = start, E = exit)
+const mazeMaps = [
+    [
+        "###########",
+        "#S........#",
+        "#.###.###.#",
+        "#...#...#.#",
+        "###.#.#.#.#",
+        "#...#.#.#.#",
+        "#.###.#.#.#",
+        "#.....#...E",
+        "###########"
+    ],
+    [
+        "#############",
+        "#S..#.......#",
+        "###.#.#####.#",
+        "#...#.....#.#",
+        "#.#####.#.#.#",
+        "#.......#.#.#",
+        "#.#######.#.#",
+        "#.........#E#",
+        "#############"
+    ],
+    [
+        "###############",
+        "#S....#.......#",
+        "#####.#.#####.#",
+        "#.....#.#...#.#",
+        "#.###.#.#.#.#.#",
+        "#...#.#...#.#.#",
+        "###.#.#####.#.#",
+        "#...#.......#.#",
+        "#.###########.#",
+        "#.............E",
+        "###############"
+    ]
+];
+
+function initMaze() {
+    const level = gameState.mazeLevel % mazeMaps.length;
+    gameState.mazeMap = mazeMaps[level].map(row => row.split(''));
+
+    // Find start and exit positions
+    for (let y = 0; y < gameState.mazeMap.length; y++) {
+        for (let x = 0; x < gameState.mazeMap[y].length; x++) {
+            if (gameState.mazeMap[y][x] === 'S') {
+                gameState.playerX = x;
+                gameState.playerY = y;
+                gameState.mazeMap[y][x] = '.';
+            }
+            if (gameState.mazeMap[y][x] === 'E') {
+                gameState.exitX = x;
+                gameState.exitY = y;
+            }
+        }
+    }
+}
+
+function getMazeDisplay() {
+    let display = '';
+    for (let y = 0; y < gameState.mazeMap.length; y++) {
+        for (let x = 0; x < gameState.mazeMap[y].length; x++) {
+            if (x === gameState.playerX && y === gameState.playerY) {
+                display += '<span class="success">@</span>';
+            } else if (gameState.mazeMap[y][x] === '#') {
+                display += '<span class="info">█</span>';
+            } else if (gameState.mazeMap[y][x] === 'E') {
+                display += '<span class="highlight">E</span>';
+            } else {
+                display += ' ';
+            }
+        }
+        display += '\n';
+    }
+    return `<span style="font-family: monospace; line-height: 1.1;">${display}</span>Level: ${gameState.mazeLevel + 1}`;
+}
 
 // Process game input
 function processGameInput(input) {
@@ -253,6 +527,127 @@ You got it in <span class="highlight">${gameState.attempts}</span> attempts.`;
         return `You: ${emojis[trimmed]} vs Computer: ${emojis[computerChoice]}
 ${result}
 Play again or type '<span class="highlight">quit</span>' to exit.`;
+    }
+
+    if (gameState.type === 'wordle') {
+        if (trimmed.length !== 5) {
+            return `<span class="error">Please enter a 5-letter word!</span>`;
+        }
+        if (!/^[a-z]+$/.test(trimmed)) {
+            return `<span class="error">Letters only!</span>`;
+        }
+
+        gameState.attempts++;
+        const result = getWordleResult(trimmed);
+        gameState.guesses.push({ word: trimmed.toUpperCase(), result });
+
+        // Display all guesses
+        let display = gameState.guesses.map(g =>
+            `${g.word.split('').join(' ')}  ${g.result}`
+        ).join('\n');
+
+        if (trimmed === gameState.target) {
+            gameState.active = false;
+            return `${display}
+
+<span class="success">🎉 Congratulations! You got it in ${gameState.attempts} attempts!</span>`;
+        }
+
+        if (gameState.attempts >= gameState.maxAttempts) {
+            gameState.active = false;
+            return `${display}
+
+<span class="error">💀 Game over! The word was: ${gameState.target.toUpperCase()}</span>`;
+        }
+
+        return `${display}
+
+Attempt ${gameState.attempts}/${gameState.maxAttempts}`;
+    }
+
+    if (gameState.type === 'hangman') {
+        if (trimmed.length !== 1 || !/^[a-z]$/.test(trimmed)) {
+            return `<span class="error">Please enter a single letter!</span>`;
+        }
+
+        if (gameState.guessedLetters.includes(trimmed)) {
+            return `<span class="error">You already guessed '${trimmed}'!</span>
+
+${getHangmanDisplay()}`;
+        }
+
+        gameState.guessedLetters.push(trimmed);
+
+        if (!gameState.target.includes(trimmed)) {
+            gameState.wrongGuesses++;
+        }
+
+        // Check win
+        const allLettersGuessed = gameState.target.split('').every(c =>
+            gameState.guessedLetters.includes(c)
+        );
+
+        if (allLettersGuessed) {
+            gameState.active = false;
+            return `${getHangmanDisplay()}
+
+<span class="success">🎉 Congratulations! You guessed the word!</span>`;
+        }
+
+        // Check lose
+        if (gameState.wrongGuesses >= gameState.maxWrong) {
+            gameState.active = false;
+            return `${getHangmanDisplay()}
+
+<span class="error">💀 Game over! The word was: ${gameState.target}</span>`;
+        }
+
+        return getHangmanDisplay();
+    }
+
+    if (gameState.type === 'maze') {
+        let dx = 0, dy = 0;
+        if (trimmed === 'w') dy = -1;
+        else if (trimmed === 's') dy = 1;
+        else if (trimmed === 'a') dx = -1;
+        else if (trimmed === 'd') dx = 1;
+        else {
+            return `<span class="error">Use W/A/S/D to move!</span>
+
+${getMazeDisplay()}`;
+        }
+
+        const newX = gameState.playerX + dx;
+        const newY = gameState.playerY + dy;
+
+        // Check bounds and walls
+        if (newY >= 0 && newY < gameState.mazeMap.length &&
+            newX >= 0 && newX < gameState.mazeMap[newY].length &&
+            gameState.mazeMap[newY][newX] !== '#') {
+
+            gameState.playerX = newX;
+            gameState.playerY = newY;
+
+            // Check win
+            if (newX === gameState.exitX && newY === gameState.exitY) {
+                gameState.mazeLevel++;
+                if (gameState.mazeLevel >= mazeMaps.length) {
+                    gameState.active = false;
+                    return `<span class="success">🎉 Congratulations! You completed all ${mazeMaps.length} levels!</span>`;
+                } else {
+                    initMaze();
+                    return `<span class="success">🎉 Level complete! Starting level ${gameState.mazeLevel + 1}...</span>
+
+${getMazeDisplay()}`;
+                }
+            }
+        } else {
+            return `<span class="error">Can't move there!</span>
+
+${getMazeDisplay()}`;
+        }
+
+        return getMazeDisplay();
     }
 
     return '';
@@ -541,6 +936,25 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         focusInput();
+
+        // If in maze game, handle WASD immediately without Enter
+        if (gameState.active && gameState.type === 'maze') {
+            const key = e.key.toLowerCase();
+            if (['w', 'a', 's', 'd'].includes(key)) {
+                e.preventDefault();
+                const result = processGameInput(key);
+                if (result) appendOutput(result);
+                scrollToBottom();
+                return;
+            }
+            if (key === 'q') {
+                e.preventDefault();
+                gameState.active = false;
+                appendOutput(`<span class="info">Game ended. Thanks for playing!</span>`);
+                scrollToBottom();
+                return;
+            }
+        }
 
         if (e.key === 'Enter') {
             e.preventDefault();
