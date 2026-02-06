@@ -44,6 +44,7 @@ const commands = {
   <span class="highlight">contact</span>       - Contact information
   <span class="highlight">goto &lt;url&gt;</span>    - Open a link (github, email, blog)
   <span class="highlight">puzzle &lt;t&gt;</span>    - Decrypt a secret message
+  <span class="highlight">stats</span>         - Show visitor statistics
   <span class="highlight">clear</span>         - Clear the terminal
   <span class="highlight">date</span>          - Show current date and time
   <span class="highlight">whoami</span>        - Who am I?
@@ -86,6 +87,20 @@ Type '<span class="highlight">goto github</span>' or '<span class="highlight">go
     },
 
     whoami: () => 'coolonion',
+
+    stats: () => {
+        const pv = document.getElementById('busuanzi_value_site_pv')?.innerText || 'Loading...';
+        const uv = document.getElementById('busuanzi_value_site_uv')?.innerText || 'Loading...';
+        return `
+<span class="success">📊 Visitor Statistics</span>
+<span class="info">──────────────────────────────────────</span>
+
+<span class="highlight">Total Views:</span>    ${pv}
+<span class="highlight">Unique Visitors:</span> ${uv}
+
+<span class="info">Powered by busuanzi</span>
+`;
+    },
 
     puzzle: (args) => {
         if (!args || args.length === 0) {
