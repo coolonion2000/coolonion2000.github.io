@@ -343,4 +343,20 @@ document.addEventListener('DOMContentLoaded', () => {
             focusInput();
         }
     });
+
+    // Handle paste
+    document.addEventListener('paste', (e) => {
+        if (waitingForBootEnter) return;
+
+        const terminal = document.getElementById('terminal');
+        if (terminal.classList.contains('hidden')) return;
+
+        e.preventDefault();
+        const text = (e.clipboardData || window.clipboardData).getData('text');
+        // Only take the first line if multiple lines pasted
+        const firstLine = text.split('\n')[0].trim();
+        currentInput += firstLine;
+        updateInputDisplay();
+        scrollToBottom();
+    });
 });
