@@ -35,6 +35,21 @@ const welcomeMessage = `
 <span class="info">Type '<span class="highlight">help</span>' to see available commands.</span>
 `;
 
+const themeNames = ['default', 'amber', 'blue', 'purple'];
+
+function applyTheme(name) {
+    const normalized = themeNames.includes(name) ? name : 'default';
+    if (normalized === 'default') {
+        document.body.removeAttribute('data-theme');
+    } else {
+        document.body.setAttribute('data-theme', normalized);
+    }
+    try {
+        localStorage.setItem('theme', normalized);
+    } catch {}
+    return normalized;
+}
+
 const commands = {
     help: () => `
 <span class="success">Available commands:</span>
@@ -49,6 +64,7 @@ const commands = {
   <span class="highlight">clear</span>         - Clear the terminal
   <span class="highlight">date</span>          - Show current date and time
   <span class="highlight">whoami</span>        - Who am I?
+  <span class="highlight">theme &lt;name&gt;</span>  - Change theme (default, amber, blue, purple)
 `,
 
     about: () => `
@@ -87,6 +103,20 @@ Type '<span class="highlight">goto github</span>' or '<span class="highlight">go
     },
 
     whoami: () => 'coolonion',
+    
+    theme: (args) => {
+        if (!args || args.length === 0) {
+            return `<span class="error">Usage: theme &lt;name&gt;</span>
+Available: ${themeNames.join(', ')}`;
+        }
+        const name = args[0].toLowerCase();
+        if (!themeNames.includes(name)) {
+            return `<span class="error">Unknown theme: ${name}</span>
+Available: ${themeNames.join(', ')}`;
+        }
+        const applied = applyTheme(name);
+        return `<span class="success">Theme set to ${applied}</span>`;
+    },
 
     stats: () => {
         const pv = document.getElementById('busuanzi_value_site_pv')?.innerText || 'Loading...';
@@ -895,6 +925,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const lastVisit = localStorage.getItem('lastVisit');
     const now = Date.now();
     const oneHour = 60 * 60 * 1000; // 1 hour in milliseconds
+    
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme) {
+        applyTheme(savedTheme);
+    }
 
     if (lastVisit && (now - parseInt(lastVisit)) < oneHour) {
         // Skip boot sequence, go directly to terminal

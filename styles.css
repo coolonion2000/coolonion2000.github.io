@@ -15,7 +15,46 @@
     --prompt-color: #00ff00;
     --error-color: #ff5555;
     --link-color: #55ffff;
+    --success-color: #00ff00;
+    --info-color: #888888;
+    --highlight-color: #ffff00;
     --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+}
+
+body[data-theme="amber"] {
+    --bg-color: #0c0b08;
+    --text-color: #ffb000;
+    --text-dim: #cc8a00;
+    --prompt-color: #ffb000;
+    --error-color: #ff6b6b;
+    --link-color: #ffd27f;
+    --success-color: #ffcc66;
+    --info-color: #b28a4a;
+    --highlight-color: #ffd866;
+}
+
+body[data-theme="blue"] {
+    --bg-color: #0b1021;
+    --text-color: #4fc3f7;
+    --text-dim: #1f8ebf;
+    --prompt-color: #4fc3f7;
+    --error-color: #ff6b6b;
+    --link-color: #7ad3ff;
+    --success-color: #7dd3fc;
+    --info-color: #6b7c9e;
+    --highlight-color: #93c5fd;
+}
+
+body[data-theme="purple"] {
+    --bg-color: #120b1f;
+    --text-color: #c084fc;
+    --text-dim: #8b5cf6;
+    --prompt-color: #c084fc;
+    --error-color: #ff6b6b;
+    --link-color: #e9b8ff;
+    --success-color: #d8b4fe;
+    --info-color: #8a7aa6;
+    --highlight-color: #f0abfc;
 }
 
 html,
@@ -72,7 +111,7 @@ body {
 }
 
 .boot-text .ok {
-    color: #00ff00;
+    color: var(--success-color);
 }
 
 /* ========================================
@@ -128,11 +167,11 @@ body {
 }
 
 #output .success {
-    color: #00ff00;
+    color: var(--success-color);
 }
 
 #output .info {
-    color: #888888;
+    color: var(--info-color);
 }
 
 #output .link {
@@ -151,7 +190,7 @@ body {
 }
 
 #output .highlight {
-    color: #ffff00;
+    color: var(--highlight-color);
 }
 
 /* Input Line */
