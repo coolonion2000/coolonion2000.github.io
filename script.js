@@ -72,7 +72,7 @@ function loadHitokoto() {
 }
 
 const starConfig = {
-    max: 100
+    max: 200
 };
 
 const starState = {
@@ -80,6 +80,8 @@ const starState = {
     ctx: null,
     stars: [],
     explosions: [],
+    shootingStars: [],
+    nextShootingStarTime: 0,
     centerX: null,
     centerY: null,
     width: 0,
@@ -88,14 +90,52 @@ const starState = {
 };
 
 function createStar() {
+    const hasTrail = Math.random() < 0.05;
+    // Trails = faster than background but not too fast
+    // Background = very slow
+    const speed = hasTrail 
+        ? (0.0003 + Math.random() * 0.0006) 
+        : (0.00005 + Math.random() * 0.0002);
+
     return {
-        speed: 0.0004 + Math.random() * 0.0012,
+        speed: speed,
         size: 0.6 + Math.random() * 1.2,
         phase: Math.random() * Math.PI * 2,
         x: 0,
         y: 0,
         radius: 0,
-        angle: 0
+        angle: 0,
+        hasTrail: hasTrail,
+        trail: [],
+        type: Math.random() < 0.01 ? 'cross' : 'circle'
+    };
+}
+
+function createShootingStar() {
+    const angle = Math.random() * Math.PI * 2;
+    // Start from outside the screen
+    const dist = Math.hypot(starState.width, starState.height);
+    const startX = starState.width / 2 + Math.cos(angle) * dist;
+    const startY = starState.height / 2 + Math.sin(angle) * dist;
+    
+    // Target anywhere on screen
+    const targetX = Math.random() * starState.width;
+    const targetY = Math.random() * starState.height;
+    
+    const dx = targetX - startX;
+    const dy = targetY - startY;
+    const len = Math.hypot(dx, dy);
+    const speed = 15 + Math.random() * 15; // Increased speed variance
+    
+    return {
+        x: startX,
+        y: startY,
+        vx: (dx / len) * speed,
+        vy: (dy / len) * speed,
+        size: 1.0 + Math.random() * 1.0, // Size 1.0 to 2.0
+        trail: [],
+        life: 0,
+        maxLife: 400
     };
 }
 
@@ -139,6 +179,9 @@ function initStarfield() {
         return s;
     });
 
+    // Initialize shooting star timer
+    starState.nextShootingStarTime = performance.now() + 5000 + Math.random() * 55000;
+
     document.addEventListener('click', (e) => {
         const x = e.clientX;
         const y = e.clientY;
@@ -148,6 +191,7 @@ function initStarfield() {
             const dy = s.y - y;
             s.radius = Math.hypot(dx, dy);
             s.angle = Math.atan2(dy, dx);
+            s.trail = []; // Clear trail on center change to avoid artifacts
         }
         
         starState.centerX = x;
@@ -192,16 +236,92 @@ function renderStarfield(timestamp) {
     starState.time = timestamp * 0.002;
     ctx.clearRect(0, 0, starState.width, starState.height);
 
+    // Periodic shooting star
+    const now = performance.now();
+    if (now > starState.nextShootingStarTime) {
+        starState.shootingStars.push(createShootingStar());
+        starState.nextShootingStarTime = now + 5000 + Math.random() * 55000;
+    }
+
+    // Auto-respawn stars if count is low
+    if (starState.stars.length < starConfig.max && Math.random() < 0.05) {
+        const s = createStar();
+        s.x = Math.random() * starState.width;
+        s.y = Math.random() * starState.height;
+        const dx = s.x - starState.centerX;
+        const dy = s.y - starState.centerY;
+        s.radius = Math.hypot(dx, dy);
+        s.angle = Math.atan2(dy, dx);
+        // Add a birth timestamp for fade-in effect if needed, 
+        // but current alpha oscillation is good enough to mask entry
+        starState.stars.push(s);
+    }
+
+    const maxDist = Math.hypot(starState.width, starState.height) * 1.2;
+
     for (const s of starState.stars) {
         s.angle += s.speed;
         s.x = starState.centerX + Math.cos(s.angle) * s.radius;
         s.y = starState.centerY + Math.sin(s.angle) * s.radius;
         
+        // Check if star is too far and off-screen
+        const isOffScreen = s.x < -50 || s.x > starState.width + 50 || s.y < -50 || s.y > starState.height + 50;
+        if (isOffScreen && s.radius > maxDist) {
+            // Reset orbit to be within reasonable range
+            s.radius = Math.random() * maxDist * 0.8;
+            // Recalculate position based on new radius (keep angle)
+            s.x = starState.centerX + Math.cos(s.angle) * s.radius;
+            s.y = starState.centerY + Math.sin(s.angle) * s.radius;
+            s.trail = [];
+        }
+
         const alpha = 0.3 + 0.6 * (Math.sin(starState.time + s.phase) + 1) / 2;
-        ctx.fillStyle = `rgba(255,255,255,${alpha})`;
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
-        ctx.fill();
+        
+        // Draw trail if enabled
+        if (s.hasTrail) {
+            // Only add trail point every 2 frames to extend length visually without using too much memory
+            // or just increase length significantly. Since speed is low, points are close.
+            // Let's just push every frame but keep a much longer tail.
+            s.trail.unshift({x: s.x, y: s.y});
+            if (s.trail.length > 50) s.trail.pop(); // Increased from 20 to 50
+            
+            if (s.trail.length > 1) {
+                ctx.beginPath();
+                ctx.moveTo(s.trail[0].x, s.trail[0].y);
+                for (let j = 1; j < s.trail.length; j++) {
+                    ctx.lineTo(s.trail[j].x, s.trail[j].y);
+                }
+                // Make trail brighter
+                const grad = ctx.createLinearGradient(s.trail[0].x, s.trail[0].y, s.trail[s.trail.length-1].x, s.trail[s.trail.length-1].y);
+                grad.addColorStop(0, `rgba(255,255,255,${alpha * 0.8})`); // Increased opacity
+                grad.addColorStop(1, 'rgba(255,255,255,0)');
+                ctx.strokeStyle = grad;
+                ctx.lineWidth = s.size * 1.5; // Slightly thicker
+                ctx.lineCap = 'round'; // Smoother ends
+                ctx.stroke();
+            }
+        }
+
+        if (s.type === 'cross') {
+            ctx.save();
+            ctx.translate(s.x, s.y);
+            ctx.rotate(starState.time + s.phase);
+            const crossSize = s.size * 3.5;
+            ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
+            ctx.lineWidth = Math.max(0.8, s.size * 0.6);
+            ctx.beginPath();
+            ctx.moveTo(-crossSize, 0);
+            ctx.lineTo(crossSize, 0);
+            ctx.moveTo(0, -crossSize);
+            ctx.lineTo(0, crossSize);
+            ctx.stroke();
+            ctx.restore();
+        } else {
+            ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+            ctx.beginPath();
+            ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+            ctx.fill();
+        }
     }
 
     for (let i = starState.explosions.length - 1; i >= 0; i--) {
@@ -221,6 +341,46 @@ function renderStarfield(timestamp) {
         }
         if (alive === 0) {
             starState.explosions.splice(i, 1);
+        }
+    }
+
+    // Render shooting stars
+    for (let i = starState.shootingStars.length - 1; i >= 0; i--) {
+        const s = starState.shootingStars[i];
+        s.x += s.vx;
+        s.y += s.vy;
+        s.life++;
+        
+        s.trail.unshift({x: s.x, y: s.y});
+        if (s.trail.length > 20) s.trail.pop();
+        
+        // Draw trail
+        if (s.trail.length > 1) {
+            ctx.beginPath();
+            ctx.moveTo(s.trail[0].x, s.trail[0].y);
+            for (let j = 1; j < s.trail.length; j++) {
+                ctx.lineTo(s.trail[j].x, s.trail[j].y);
+            }
+            const grad = ctx.createLinearGradient(s.trail[0].x, s.trail[0].y, s.trail[s.trail.length-1].x, s.trail[s.trail.length-1].y);
+            grad.addColorStop(0, 'rgba(255,255,255,1)');
+            grad.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.strokeStyle = grad;
+            ctx.lineWidth = s.size;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+        }
+        
+        // Draw head
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Remove if out of bounds (with margin) or too old
+        const margin = 200;
+        if (s.life > s.maxLife || 
+            (s.life > 20 && (s.x < -margin || s.x > starState.width + margin || s.y < -margin || s.y > starState.height + margin))) {
+            starState.shootingStars.splice(i, 1);
         }
     }
 
