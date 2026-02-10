@@ -36,6 +36,7 @@ const welcomeMessage = `
 `;
 
 const themeNames = ['default', 'amber', 'blue', 'purple'];
+const defaultGithubUser = 'coolonion2000';
 
 function applyTheme(name) {
     const normalized = themeNames.includes(name) ? name : 'default';
@@ -50,6 +51,72 @@ function applyTheme(name) {
     return normalized;
 }
 
+function loadHitokoto() {
+    const url = 'https://v1.hitokoto.cn/';
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+    fetch(url, { signal: controller.signal })
+        .then(r => r.json())
+        .then(d => {
+            clearTimeout(timeoutId);
+            const text = d && d.hitokoto ? d.hitokoto : '';
+            const from = d && d.from ? d.from : '';
+            const fromWho = d && d.from_who ? d.from_who : '';
+            const source = [fromWho, from].filter(Boolean).join(' · ');
+            const html = `<span class="success">「${escapeHtml(text)}」</span>${source ? `\n<span class="info">— ${escapeHtml(source)}</span>` : ''}`;
+            if (text) appendOutput(html);
+        })
+        .catch(() => {
+            clearTimeout(timeoutId);
+        });
+}
+
+function buildProjectsOutput(repos, user) {
+    if (!repos.length) {
+        return `<span class="info">No public repositories found for ${escapeHtml(user)}.</span>`;
+    }
+    const lines = repos.map(repo => {
+        const name = escapeHtml(repo.name || '');
+        const desc = escapeHtml(repo.description || '');
+        const lang = escapeHtml(repo.language || 'N/A');
+        const stars = Number.isFinite(repo.stargazers_count) ? repo.stargazers_count : 0;
+        const updated = repo.updated_at ? new Date(repo.updated_at).toLocaleDateString() : '';
+        const meta = `${stars}★, ${lang}${updated ? `, ${updated}` : ''}`;
+        const link = repo.html_url;
+        return `<span class="highlight">•</span> <span class="link" onclick="window.open('${link}','_blank')">${name}</span> <span class="info">(${meta})</span>${desc ? `\n<span class="info">  ${desc}</span>` : ''}`;
+    }).join('\n');
+    return `<span class="success">Projects</span>
+<span class="info">──────────────────────────────────────</span>
+${lines}`;
+}
+
+function loadProjects(user) {
+    const target = user || defaultGithubUser;
+    const url = `https://api.github.com/users/${encodeURIComponent(target)}/repos?per_page=100&sort=updated`;
+    fetch(url, { headers: { 'Accept': 'application/vnd.github+json' } })
+        .then(async response => {
+            if (!response.ok) {
+                let message = `Request failed (${response.status})`;
+                try {
+                    const data = await response.json();
+                    if (data && data.message) {
+                        message = data.message;
+                    }
+                } catch {}
+                appendOutput(`<span class="error">GitHub API error: ${escapeHtml(message)}</span>`);
+                return;
+            }
+            const data = await response.json();
+            const repos = Array.isArray(data) ? data : [];
+            const filtered = repos.filter(repo => !repo.fork);
+            const top = filtered.slice(0, 8);
+            appendOutput(buildProjectsOutput(top, target));
+        })
+        .catch(() => {
+            appendOutput(`<span class="error">Failed to fetch projects.</span>`);
+        });
+}
+
 const commands = {
     help: () => `
 <span class="success">Available commands:</span>
@@ -57,6 +124,7 @@ const commands = {
   <span class="highlight">help</span>          - Show this help message
   <span class="highlight">about</span>         - About me
   <span class="highlight">contact</span>       - Contact information
+  <span class="highlight">projects</span>      - Show GitHub projects (optionally by user)
   <span class="highlight">goto &lt;url&gt;</span>    - Open a link (github, email)
   <span class="highlight">puzzle &lt;t&gt;</span>    - Decrypt a secret message
   <span class="highlight">game &lt;name&gt;</span>   - Play games (guess, rps)
@@ -116,6 +184,12 @@ Available: ${themeNames.join(', ')}`;
         }
         const applied = applyTheme(name);
         return `<span class="success">Theme set to ${applied}</span>`;
+    },
+
+    projects: (args) => {
+        const user = args && args.length > 0 ? args[0] : defaultGithubUser;
+        loadProjects(user);
+        return `<span class="info">Fetching projects for ${escapeHtml(user)}...</span>`;
     },
 
     stats: () => {
@@ -798,6 +872,7 @@ function finishBoot() {
 
         // Show welcome message
         appendOutput(welcomeMessage);
+        loadHitokoto();
 
         // Focus hidden input
         focusInput();
@@ -815,6 +890,7 @@ function skipBoot() {
 
     // Show welcome message
     appendOutput(welcomeMessage);
+    loadHitokoto();
 
     // Focus hidden input
     focusInput();
@@ -845,6 +921,35 @@ function updateInputDisplay() {
     display.textContent = currentInput;
 }
 
+function maybeBazinga() {
+    const todayKey = new Date().toDateString();
+    try {
+        const lastKey = localStorage.getItem('bazingaDay');
+        if (lastKey === todayKey) return false;
+    } catch {}
+    if (Math.random() > 0.12) return false;
+    const errors = [
+        "Kernel panic - not syncing: Fatal exception",
+        "Segmentation fault (core dumped)",
+        "Error: Unexpected token at position 0",
+        "UnhandledPromiseRejection: NetworkError when attempting to fetch resource.",
+        "Permission denied: /usr/local/bin/brain",
+        "Out of cheese error. Redo from start.",
+        "Exception: Quantum tunnel collapse detected",
+        "RuntimeError: flux capacitor overload"
+    ];
+    const count = Math.floor(Math.random() * 4) + 4;
+    for (let i = 0; i < count; i++) {
+        const msg = errors[Math.floor(Math.random() * errors.length)];
+        appendOutput(`<span class="error">${escapeHtml(msg)}</span>`);
+    }
+    appendOutput(`<span class="success">Bazinga!</span>`);
+    try {
+        localStorage.setItem('bazingaDay', todayKey);
+    } catch {}
+    return true;
+}
+
 function executeCommand(input) {
     const trimmed = input.trim();
 
@@ -862,6 +967,12 @@ function executeCommand(input) {
     if (gameState.active) {
         const result = processGameInput(trimmed);
         if (result) appendOutput(result);
+        currentInput = '';
+        updateInputDisplay();
+        return;
+    }
+
+    if (maybeBazinga()) {
         currentInput = '';
         updateInputDisplay();
         return;
