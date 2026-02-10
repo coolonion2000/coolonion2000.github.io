@@ -71,6 +71,144 @@ function loadHitokoto() {
         });
 }
 
+const starConfig = {
+    max: 100
+};
+
+const starState = {
+    canvas: null,
+    ctx: null,
+    stars: [],
+    explosions: [],
+    centerX: 0,
+    centerY: 0,
+    width: 0,
+    height: 0,
+    time: 0
+};
+
+function createStar() {
+    return {
+        angle: Math.random() * Math.PI * 2,
+        speed: 0.0004 + Math.random() * 0.0012,
+        size: 0.6 + Math.random() * 1.2,
+        phase: Math.random() * Math.PI * 2,
+        anchorX: Math.random() * (starState.width || window.innerWidth),
+        anchorY: Math.random() * (starState.height || window.innerHeight),
+        x: 0,
+        y: 0
+    };
+}
+
+function resizeStarfield() {
+    const canvas = starState.canvas;
+    const ctx = starState.ctx;
+    if (!canvas || !ctx) return;
+    const dpr = window.devicePixelRatio || 1;
+    starState.width = window.innerWidth;
+    starState.height = window.innerHeight;
+    starState.centerX = starState.width / 2;
+    starState.centerY = starState.height / 2;
+    canvas.width = starState.width * dpr;
+    canvas.height = starState.height * dpr;
+    canvas.style.width = `${starState.width}px`;
+    canvas.style.height = `${starState.height}px`;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function initStarfield() {
+    const canvas = document.getElementById('starfield');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    starState.canvas = canvas;
+    starState.ctx = ctx;
+    resizeStarfield();
+    starState.stars = Array.from({ length: starConfig.max }, () => createStar());
+
+    document.addEventListener('click', (e) => {
+        const x = e.clientX;
+        const y = e.clientY;
+        let hitIndex = -1;
+        let hitDist = 10;
+        for (let i = 0; i < starState.stars.length; i++) {
+            const s = starState.stars[i];
+            const dx = s.x - x;
+            const dy = s.y - y;
+            const dist = Math.hypot(dx, dy);
+            if (dist <= hitDist) {
+                hitDist = dist;
+                hitIndex = i;
+            }
+        }
+        if (hitIndex >= 0) {
+            const s = starState.stars[hitIndex];
+            starState.stars.splice(hitIndex, 1);
+            if (starState.stars.length < starConfig.max) {
+                starState.stars.push(createStar());
+            }
+            const particles = Array.from({ length: 12 }, () => ({
+                x: s.x,
+                y: s.y,
+                vx: (Math.random() - 0.5) * 2.2,
+                vy: (Math.random() - 0.5) * 2.2,
+                life: 0,
+                max: 18 + Math.random() * 8,
+                size: 0.6 + Math.random() * 1.4
+            }));
+            starState.explosions.push(particles);
+        }
+    });
+
+    window.addEventListener('resize', resizeStarfield);
+    requestAnimationFrame(renderStarfield);
+}
+
+function renderStarfield(timestamp) {
+    const ctx = starState.ctx;
+    if (!ctx) return;
+    starState.time = timestamp * 0.002;
+    ctx.clearRect(0, 0, starState.width, starState.height);
+
+    for (const s of starState.stars) {
+        const vx = s.anchorX - starState.centerX;
+        const vy = s.anchorY - starState.centerY;
+        const cosA = Math.cos(s.angle);
+        const sinA = Math.sin(s.angle);
+        const rx = vx * cosA - vy * sinA;
+        const ry = vx * sinA + vy * cosA;
+        s.angle += s.speed;
+        s.x = starState.centerX + rx;
+        s.y = starState.centerY + ry;
+        const alpha = 0.3 + 0.6 * (Math.sin(starState.time + s.phase) + 1) / 2;
+        ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    for (let i = starState.explosions.length - 1; i >= 0; i--) {
+        const particles = starState.explosions[i];
+        let alive = 0;
+        for (const p of particles) {
+            p.life += 1;
+            if (p.life >= p.max) continue;
+            p.x += p.vx;
+            p.y += p.vy;
+            const alpha = 1 - p.life / p.max;
+            ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            ctx.fill();
+            alive++;
+        }
+        if (alive === 0) {
+            starState.explosions.splice(i, 1);
+        }
+    }
+
+    requestAnimationFrame(renderStarfield);
+}
+
 function buildProjectsOutput(repos, user) {
     if (!repos.length) {
         return `<span class="info">No public repositories found for ${escapeHtml(user)}.</span>`;
@@ -1041,6 +1179,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (savedTheme) {
         applyTheme(savedTheme);
     }
+    initStarfield();
 
     if (lastVisit && (now - parseInt(lastVisit)) < oneHour) {
         // Skip boot sequence, go directly to terminal

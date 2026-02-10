@@ -71,6 +71,16 @@ body {
     line-height: 1.4;
 }
 
+#starfield {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 3;
+    pointer-events: none;
+}
+
 /* Hidden input for keyboard capture */
 #hidden-input {
     position: absolute;
@@ -127,6 +137,7 @@ body {
     padding: 20px;
     overflow-y: auto;
     overflow-x: hidden;
+    z-index: 2;
 }
 
 .terminal.hidden {
