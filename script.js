@@ -80,8 +80,8 @@ const starState = {
     ctx: null,
     stars: [],
     explosions: [],
-    centerX: 0,
-    centerY: 0,
+    centerX: null,
+    centerY: null,
     width: 0,
     height: 0,
     time: 0
@@ -89,14 +89,13 @@ const starState = {
 
 function createStar() {
     return {
-        angle: Math.random() * Math.PI * 2,
         speed: 0.0004 + Math.random() * 0.0012,
         size: 0.6 + Math.random() * 1.2,
         phase: Math.random() * Math.PI * 2,
-        anchorX: Math.random() * (starState.width || window.innerWidth),
-        anchorY: Math.random() * (starState.height || window.innerHeight),
         x: 0,
-        y: 0
+        y: 0,
+        radius: 0,
+        angle: 0
     };
 }
 
@@ -107,8 +106,13 @@ function resizeStarfield() {
     const dpr = window.devicePixelRatio || 1;
     starState.width = window.innerWidth;
     starState.height = window.innerHeight;
-    starState.centerX = starState.width / 2;
-    starState.centerY = starState.height / 2;
+    if (starState.centerX === null || starState.centerY === null) {
+        starState.centerX = starState.width / 2;
+        starState.centerY = starState.height / 2;
+    } else {
+        starState.centerX = Math.max(0, Math.min(starState.width, starState.centerX));
+        starState.centerY = Math.max(0, Math.min(starState.height, starState.centerY));
+    }
     canvas.width = starState.width * dpr;
     canvas.height = starState.height * dpr;
     canvas.style.width = `${starState.width}px`;
@@ -123,11 +127,32 @@ function initStarfield() {
     starState.canvas = canvas;
     starState.ctx = ctx;
     resizeStarfield();
-    starState.stars = Array.from({ length: starConfig.max }, () => createStar());
+    
+    starState.stars = Array.from({ length: starConfig.max }, () => {
+        const s = createStar();
+        s.x = Math.random() * starState.width;
+        s.y = Math.random() * starState.height;
+        const dx = s.x - starState.centerX;
+        const dy = s.y - starState.centerY;
+        s.radius = Math.hypot(dx, dy);
+        s.angle = Math.atan2(dy, dx);
+        return s;
+    });
 
     document.addEventListener('click', (e) => {
         const x = e.clientX;
         const y = e.clientY;
+        
+        for (const s of starState.stars) {
+            const dx = s.x - x;
+            const dy = s.y - y;
+            s.radius = Math.hypot(dx, dy);
+            s.angle = Math.atan2(dy, dx);
+        }
+        
+        starState.centerX = x;
+        starState.centerY = y;
+
         let hitIndex = -1;
         let hitDist = 10;
         for (let i = 0; i < starState.stars.length; i++) {
@@ -140,12 +165,9 @@ function initStarfield() {
                 hitIndex = i;
             }
         }
+
         if (hitIndex >= 0) {
             const s = starState.stars[hitIndex];
-            starState.stars.splice(hitIndex, 1);
-            if (starState.stars.length < starConfig.max) {
-                starState.stars.push(createStar());
-            }
             const particles = Array.from({ length: 12 }, () => ({
                 x: s.x,
                 y: s.y,
@@ -156,6 +178,7 @@ function initStarfield() {
                 size: 0.6 + Math.random() * 1.4
             }));
             starState.explosions.push(particles);
+            starState.stars.splice(hitIndex, 1);
         }
     });
 
@@ -170,15 +193,10 @@ function renderStarfield(timestamp) {
     ctx.clearRect(0, 0, starState.width, starState.height);
 
     for (const s of starState.stars) {
-        const vx = s.anchorX - starState.centerX;
-        const vy = s.anchorY - starState.centerY;
-        const cosA = Math.cos(s.angle);
-        const sinA = Math.sin(s.angle);
-        const rx = vx * cosA - vy * sinA;
-        const ry = vx * sinA + vy * cosA;
         s.angle += s.speed;
-        s.x = starState.centerX + rx;
-        s.y = starState.centerY + ry;
+        s.x = starState.centerX + Math.cos(s.angle) * s.radius;
+        s.y = starState.centerY + Math.sin(s.angle) * s.radius;
+        
         const alpha = 0.3 + 0.6 * (Math.sin(starState.time + s.phase) + 1) / 2;
         ctx.fillStyle = `rgba(255,255,255,${alpha})`;
         ctx.beginPath();
