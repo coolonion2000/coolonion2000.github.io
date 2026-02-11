@@ -2039,6 +2039,35 @@ function finishBoot() {
 
         // Focus hidden input
         focusInput();
+
+        // Allow copy/paste operations (Ctrl+C, Ctrl+V, Ctrl+A, etc.)
+        if (e.ctrlKey || e.metaKey) {
+            // Only handle Ctrl+L for clear
+            if (e.key === 'l') {
+                e.preventDefault();
+                commands.clear();
+            }
+            // Let other Ctrl combinations work normally (copy, paste, etc.)
+            return;
+        }
+
+        if (e.key === 'Tab') {
+            e.preventDefault();
+            const current = currentInput.toLowerCase();
+            if (!current || current.includes(' ')) return;
+
+            const matches = Object.keys(commands).filter(cmd => cmd.startsWith(current)).sort();
+            if (matches.length === 1) {
+                currentInput = matches[0] + ' ';
+                updateInputDisplay();
+            } else if (matches.length > 1) {
+                appendCommand(currentInput);
+                const list = matches.map(c => `<span class="highlight">${c}</span>`).join('  ');
+                appendOutput(list);
+                scrollToBottom();
+            }
+            return;
+        }
     }, 300);
 }
 
@@ -2222,6 +2251,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Handle keyboard input
     document.addEventListener('keydown', (e) => {
+        // If Flash overlay is active, ignore all terminal inputs
+        const flashOverlay = document.getElementById('flash-overlay');
+        if (flashOverlay && !flashOverlay.classList.contains('hidden') && flashOverlay.style.display !== 'none') {
+            return;
+        }
+
         // If waiting for Enter on boot screen
         if (waitingForBootEnter) {
             if (e.key === 'Enter') {
@@ -2236,11 +2271,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!terminal) return;
         if (terminal.classList.contains('hidden')) return;
 
-        // If Flash overlay is active, ignore all terminal inputs
-        const flashOverlay = document.getElementById('flash-overlay');
-        if (flashOverlay && !flashOverlay.classList.contains('hidden') && flashOverlay.style.display !== 'none') {
-            return;
-        }
+        focusInput();
 
         // Allow copy/paste operations (Ctrl+C, Ctrl+V, Ctrl+A, etc.)
         if (e.ctrlKey || e.metaKey) {
@@ -2270,8 +2301,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             return;
         }
-
-        focusInput();
 
         // If in flight mode, handle WASD and Q/ESC
         if (gameState.active && gameState.type === 'fly') {
@@ -2349,6 +2378,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Keep focus only when not selecting text
     document.addEventListener('click', () => {
+        // If Flash overlay is active, do not autofocus hidden input
+        const flashOverlay = document.getElementById('flash-overlay');
+        if (flashOverlay && !flashOverlay.classList.contains('hidden') && flashOverlay.style.display !== 'none') {
+            return;
+        }
+
         const selection = window.getSelection();
         if (!selection || selection.toString().length === 0) {
             focusInput();
