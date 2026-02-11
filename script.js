@@ -92,7 +92,19 @@ const starState = {
         vy: 0
     },
     monsters: [],
+    monsterBullets: [], // New: Bullets fired by monsters
     nextMonsterTime: 0,
+    score: 0, // Score tracking
+    boss: {
+        active: false,
+        defeated: false,
+        x: 0,
+        y: 0,
+        hp: 200,
+        maxHp: 200,
+        nextShot: 0,
+        color: '#ff00ff'
+    },
     bannerText: null, // Will store reference to banner element
     bannerOriginalContent: '',
     nextShootingStarTime: 0,
@@ -158,22 +170,150 @@ function createShootingStar() {
 }
 
 function createMonster() {
-    // Start from bottom right
+    // Start from right side, random Y
     const startX = starState.width + 50;
-    const startY = starState.height + 50;
+    const startY = Math.random() * starState.height;
     
+    // 20% chance to be a Red Elite monster
+    const isRed = Math.random() < 0.2;
+
     return {
         x: startX,
         y: startY,
         vx: 0,
         vy: 0,
         size: 12 + Math.random() * 6, // Larger size, similar to ship
-        hp: 1, // Die in 1 hit
-        color: `rgba(${200 + Math.random()*55}, ${200 + Math.random()*55}, ${200 + Math.random()*55}, 0.9)`, // Greyish/White
+        hp: isRed ? 3 : 1, // Red monsters are tougher
+        color: isRed ? '#ff4444' : `rgba(${200 + Math.random()*55}, ${200 + Math.random()*55}, ${200 + Math.random()*55}, 0.9)`, 
         targetOffsetX: Math.random(), // Relative offset in banner
-        targetOffsetY: Math.random()
+        targetOffsetY: Math.random(),
+        type: isRed ? 'red' : 'normal',
+        nextShot: isRed ? performance.now() + 2000 + Math.random() * 3000 : 0
     };
 }
+
+function handleShipHit() {
+    const ship = starState.ship;
+    
+    // Create explosion at ship pos
+    const particles = Array.from({ length: 30 }, () => ({
+        x: ship.x,
+        y: ship.y,
+        vx: (Math.random() - 0.5) * 8,
+        vy: (Math.random() - 0.5) * 8,
+        life: 0,
+        max: 40 + Math.random() * 20,
+        size: 2 + Math.random() * 4,
+        color: '#ffaa00'
+    }));
+    starState.explosions.push(particles);
+
+    // Reset ship position
+    ship.x = starState.width / 2;
+    ship.y = starState.height / 2;
+    ship.targetX = ship.x;
+    ship.targetY = ship.y;
+    ship.vx = 0;
+    ship.vy = 0;
+
+    // Remove 10 characters from banner
+    if (starState.bannerText) {
+        let text = starState.bannerText.textContent;
+        const indices = [];
+        for(let k=0; k<text.length; k++) {
+            if (text[k] !== ' ' && text[k] !== '\n') indices.push(k);
+        }
+        
+        // Shuffle indices to remove random chars
+        for (let i = indices.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [indices[i], indices[j]] = [indices[j], indices[i]];
+        }
+        
+        const toRemove = Math.min(10, indices.length);
+        const chars = text.split('');
+        for (let i = 0; i < toRemove; i++) {
+            chars[indices[i]] = ' ';
+        }
+        const newText = chars.join('');
+        starState.bannerText.textContent = newText;
+        
+        if (newText.trim().length === 0) {
+            triggerSystemCrash();
+        }
+    }
+}
+
+function triggerSystemCrash() {
+    if (!gameState.active || gameState.type !== 'fly') return;
+    
+    gameState.active = false; // Stop game loop logic
+    starState.monsters = [];
+    starState.bullets = [];
+    starState.monsterBullets = [];
+    
+    // Blue Screen of Death effect
+    document.body.innerHTML = '';
+    document.body.style.backgroundColor = '#0000AA';
+    document.body.style.color = '#FFFFFF';
+    document.body.style.fontFamily = "'Courier New', monospace";
+    document.body.style.padding = '50px';
+    document.body.style.fontSize = '24px';
+    
+    document.body.innerHTML = `
+        <p>A problem has been detected and the system has been shut down to prevent damage to your computer.</p>
+        <br>
+        <p>BANNER_DESTROYED_BY_ALIENS</p>
+        <br>
+        <p>If this is the first time you've seen this stop error screen, restart your computer. If this screen appears again, follow these steps:</p>
+        <br>
+        <p>Check to be sure you have adequate anti-alien software installed.</p>
+        <p>If problems continue, disable or remove any newly installed monsters.</p>
+        <br>
+        <p>Technical Information:</p>
+        <br>
+        <p>*** STOP: 0x00000404 (0xC00L0N10N, 0xDEADBEEF, 0x00000000, 0x00000000)</p>
+        <br>
+        <p>Beginning dump of physical memory</p>
+        <p>Physical memory dump complete.</p>
+        <p>Contact your system administrator or technical support group for further assistance.</p>
+        <br>
+        <p>Press Refresh to restart.</p>
+    `;
+}
+
+function triggerVictory() {
+    if (!gameState.active || gameState.type !== 'fly') return;
+    
+    gameState.active = false;
+    starState.boss.active = false;
+    starState.boss.defeated = true;
+    
+    // Victory Screen
+    document.body.innerHTML = '';
+    document.body.style.backgroundColor = '#000000';
+    document.body.style.color = '#00ff00';
+    document.body.style.fontFamily = "'Courier New', monospace";
+    document.body.style.display = 'flex';
+    document.body.style.flexDirection = 'column';
+    document.body.style.justifyContent = 'center';
+    document.body.style.alignItems = 'center';
+    document.body.style.height = '100vh';
+    document.body.style.fontSize = '24px';
+    document.body.style.textAlign = 'center';
+    
+    document.body.innerHTML = `
+        <h1 style="font-size: 60px; color: #ffff00; text-shadow: 0 0 20px #ff0000;">VICTORY!</h1>
+        <br>
+        <p>You have defeated the CoolOnion Boss!</p>
+        <p>The system is safe... for now.</p>
+        <br>
+        <p style="color: #00ffff">Final Score: ${starState.score + 5000}</p>
+        <br>
+        <p>Press Refresh to play again.</p>
+    `;
+}
+
 
 function resizeStarfield() {
     const canvas = starState.canvas;
@@ -332,9 +472,115 @@ function initStarfield() {
 function renderStarfield(timestamp) {
     const ctx = starState.ctx;
     if (!ctx) return;
+    
+    // Stop rendering if canvas is removed from DOM (e.g. crash/victory screen)
+    if (starState.canvas && !document.body.contains(starState.canvas)) return;
+
     starState.time = timestamp * 0.002;
     ctx.clearRect(0, 0, starState.width, starState.height);
     const now = performance.now();
+
+    // Score Display & Boss Logic
+    if (gameState.active && gameState.type === 'fly') {
+        // Score
+        ctx.save();
+        ctx.fillStyle = '#fff';
+        ctx.font = '20px monospace';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        ctx.fillText(`SCORE: ${starState.score}`, 20, 20);
+        
+        // Boss HP Bar
+        if (starState.boss.active) {
+             const hpPercent = Math.max(0, starState.boss.hp / starState.boss.maxHp);
+             const barW = 300;
+             const barH = 20;
+             const barX = starState.width/2 - barW/2;
+             const barY = 20;
+             
+             ctx.fillStyle = '#333';
+             ctx.fillRect(barX, barY, barW, barH);
+             ctx.fillStyle = '#f00';
+             ctx.fillRect(barX, barY, barW * hpPercent, barH);
+             ctx.strokeStyle = '#fff';
+             ctx.strokeRect(barX, barY, barW, barH);
+             
+             ctx.fillStyle = '#fff';
+             ctx.textAlign = 'center';
+             ctx.font = '14px monospace';
+             ctx.fillText('BOSS', starState.width/2, barY + 35);
+        }
+        ctx.restore();
+        
+        // Boss Update & Render
+        if (starState.boss.active) {
+            const b = starState.boss;
+            
+            // Move to target Y
+            const targetY = 150;
+            b.y += (targetY - b.y) * 0.02;
+            
+            // Horizontal movement (Sine wave)
+            b.x = starState.width / 2 + Math.sin(now * 0.001) * (starState.width * 0.35);
+            
+            // Draw Boss
+            ctx.save();
+            ctx.translate(b.x, b.y);
+            const scale = 1 + Math.sin(now * 0.005) * 0.1;
+            ctx.scale(scale, scale);
+            ctx.fillStyle = b.color;
+            ctx.font = 'bold 80px monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.shadowColor = '#f0f';
+            ctx.shadowBlur = 20;
+            ctx.fillText('CoolOnion', 0, 0);
+            ctx.restore();
+            
+            // Shooting (360 burst)
+            if (now > b.nextShot) {
+                const numBullets = 16;
+                for (let i = 0; i < numBullets; i++) {
+                     const angle = (Math.PI * 2 / numBullets) * i + now * 0.001;
+                     starState.monsterBullets.push({
+                         x: b.x,
+                         y: b.y,
+                         vx: Math.cos(angle) * 4,
+                         vy: Math.sin(angle) * 4,
+                         life: 0,
+                         maxLife: 400
+                     });
+                }
+                b.nextShot = now + 2000;
+            }
+            
+            // Check collision with player bullets
+            for (let i = starState.bullets.length - 1; i >= 0; i--) {
+                const bul = starState.bullets[i];
+                // Approximate text box collision (440x80 roughly)
+                if (Math.abs(bul.x - b.x) < 220 && Math.abs(bul.y - b.y) < 40) {
+                    b.hp--;
+                    starState.bullets.splice(i, 1);
+                    
+                    // Hit flash
+                    ctx.save();
+                    ctx.translate(b.x, b.y);
+                    ctx.scale(scale, scale);
+                    ctx.fillStyle = '#fff';
+                    ctx.font = 'bold 80px monospace';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('CoolOnion', 0, 0);
+                    ctx.restore();
+    
+                    if (b.hp <= 0) {
+                        triggerVictory();
+                        return;
+                    }
+                }
+            }
+        }
+    }
 
     // Update and draw ship
     const ship = starState.ship;
@@ -416,15 +662,13 @@ function renderStarfield(timestamp) {
             if (dist < m.size + 5) {
                 // Hit!
                 m.hp--;
-                m.size *= 0.9; // Shrink slightly
+                m.hitFlash = 5; // Flash effect
                 starState.bullets.splice(i, 1); // Remove bullet
                 
-                // Flash effect
-                m.hitFlash = 5;
-
                 if (m.hp <= 0) {
                     // Monster destroyed
                     starState.monsters.splice(j, 1);
+                    starState.score += 10;
                     
                     // Explosion
                     const particles = Array.from({ length: 20 }, () => ({
@@ -444,12 +688,57 @@ function renderStarfield(timestamp) {
         }
     }
 
+    // Update and draw monster bullets
+    ctx.fillStyle = '#ff0';
+    for (let i = starState.monsterBullets.length - 1; i >= 0; i--) {
+        const b = starState.monsterBullets[i];
+        b.x += b.vx;
+        b.y += b.vy;
+        b.life++;
+        
+        // Remove if out of bounds or expired
+        if (b.life > b.maxLife || b.x < 0 || b.x > starState.width || b.y < 0 || b.y > starState.height) {
+            starState.monsterBullets.splice(i, 1);
+            continue;
+        }
+
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Check collision with ship
+        if (gameState.active && gameState.type === 'fly') {
+            const dist = Math.hypot(ship.x - b.x, ship.y - b.y);
+            if (dist < 15) { // Ship hit radius
+                starState.monsterBullets.splice(i, 1);
+                handleShipHit();
+                // Stop if game ended (crash) to avoid undefined access
+                if (!gameState.active) return;
+            }
+        }
+    }
+
+    // Spawn Boss if score >= 100
+    if (starState.score >= 100 && !starState.boss.active && !starState.boss.defeated) {
+        starState.boss.active = true;
+        starState.boss.x = starState.width / 2;
+        starState.boss.y = -100;
+        starState.boss.hp = 200;
+        starState.boss.nextShot = now + 2000;
+    }
+
     // Spawn and update monsters
     if (now > starState.nextMonsterTime) {
-        if (starState.monsters.length < 5) { // Max 5 monsters at once
+        const isFlyMode = gameState.active && gameState.type === 'fly';
+        const maxMonsters = isFlyMode ? 20 : 1;
+        
+        if (starState.monsters.length < maxMonsters) {
             starState.monsters.push(createMonster());
         }
-        starState.nextMonsterTime = now + 5000 + Math.random() * 10000;
+        
+        // Spawn faster in fly mode
+        const delay = isFlyMode ? (1000 + Math.random() * 2000) : (10000 + Math.random() * 10000);
+        starState.nextMonsterTime = now + delay;
     }
 
     // Get banner position once per frame
@@ -557,7 +846,14 @@ function renderStarfield(timestamp) {
                         const idx = indices[Math.floor(Math.random() * indices.length)];
                         const chars = text.split('');
                         chars[idx] = ' '; // Eat it
-                        starState.bannerText.textContent = chars.join('');
+                        const newText = chars.join('');
+                        starState.bannerText.textContent = newText;
+                        
+                        // Check if banner is fully destroyed
+                        if (newText.trim().length === 0) {
+                             triggerSystemCrash();
+                             return; // Stop frame immediately
+                        }
                     }
                 }
             }
@@ -576,6 +872,25 @@ function renderStarfield(timestamp) {
                 color: '#ccc'
             }));
             starState.explosions.push(particles);
+            continue;
+        }
+
+        // Red monster logic: Shoot at ship
+        if (m.type === 'red' && now > m.nextShot) {
+            const dx = ship.x - m.x;
+            const dy = ship.y - m.y;
+            const angle = Math.atan2(dy, dx);
+            
+            starState.monsterBullets.push({
+                x: m.x,
+                y: m.y,
+                vx: Math.cos(angle) * 4,
+                vy: Math.sin(angle) * 4,
+                life: 0,
+                maxLife: 200
+            });
+            
+            m.nextShot = now + 2000 + Math.random() * 2000;
         }
     }
 
@@ -1061,6 +1376,20 @@ Available games: guess, rps, wordle, hangman, maze`;
         gameState.type = 'fly';
         // Reset keys
         starState.keys = { w: false, a: false, s: false, d: false };
+        
+        // Reset game state
+        starState.score = 0;
+        starState.boss.active = false;
+        starState.boss.defeated = false;
+        starState.boss.hp = 200;
+        starState.monsters = [];
+        starState.bullets = [];
+        starState.monsterBullets = [];
+        starState.ship.x = starState.width / 2;
+        starState.ship.y = starState.height / 2;
+        starState.ship.vx = 0;
+        starState.ship.vy = 0;
+
         return `<span class="success">🚀 Flight Mode Activated!</span>
 <span class="info">──────────────────────────────────────</span>
 Use <span class="highlight">W/A/S/D</span> to move the ship.
@@ -1760,7 +2089,8 @@ function sleep(ms) {
 }
 
 function focusInput() {
-    document.getElementById('hidden-input').focus();
+    const input = document.getElementById('hidden-input');
+    if (input) input.focus();
 }
 
 // ========================================
@@ -1804,6 +2134,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Make sure terminal is visible
         const terminal = document.getElementById('terminal');
+        if (!terminal) return;
         if (terminal.classList.contains('hidden')) return;
 
         // Allow copy/paste operations (Ctrl+C, Ctrl+V, Ctrl+A, etc.)
