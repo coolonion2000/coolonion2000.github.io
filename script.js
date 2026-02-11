@@ -100,10 +100,12 @@ const starState = {
         defeated: false,
         x: 0,
         y: 0,
-        hp: 200,
-        maxHp: 200,
+        hp: 50,
+        maxHp: 50,
         nextShot: 0,
-        color: '#ff00ff'
+        color: '#ff00ff',
+        dying: false,
+        deathTime: 0
     },
     bannerText: null, // Will store reference to banner element
     bannerOriginalContent: '',
@@ -285,33 +287,37 @@ function triggerSystemCrash() {
 function triggerVictory() {
     if (!gameState.active || gameState.type !== 'fly') return;
     
+    // Stop loop immediately to prevent race conditions
     gameState.active = false;
     starState.boss.active = false;
     starState.boss.defeated = true;
     
-    // Victory Screen
-    document.body.innerHTML = '';
-    document.body.style.backgroundColor = '#000000';
-    document.body.style.color = '#00ff00';
-    document.body.style.fontFamily = "'Courier New', monospace";
-    document.body.style.display = 'flex';
-    document.body.style.flexDirection = 'column';
-    document.body.style.justifyContent = 'center';
-    document.body.style.alignItems = 'center';
-    document.body.style.height = '100vh';
-    document.body.style.fontSize = '24px';
-    document.body.style.textAlign = 'center';
-    
-    document.body.innerHTML = `
-        <h1 style="font-size: 60px; color: #ffff00; text-shadow: 0 0 20px #ff0000;">VICTORY!</h1>
-        <br>
-        <p>You have defeated the CoolOnion Boss!</p>
-        <p>The system is safe... for now.</p>
-        <br>
-        <p style="color: #00ffff">Final Score: ${starState.score + 5000}</p>
-        <br>
-        <p>Press Refresh to play again.</p>
-    `;
+    // Use setTimeout to allow current frame to finish cleanly
+    setTimeout(() => {
+        // Victory Screen
+        document.body.innerHTML = '';
+        document.body.style.backgroundColor = '#000000';
+        document.body.style.color = '#00ff00';
+        document.body.style.fontFamily = "'Courier New', monospace";
+        document.body.style.display = 'flex';
+        document.body.style.flexDirection = 'column';
+        document.body.style.justifyContent = 'center';
+        document.body.style.alignItems = 'center';
+        document.body.style.height = '100vh';
+        document.body.style.fontSize = '24px';
+        document.body.style.textAlign = 'center';
+        
+        document.body.innerHTML = `
+            <h1 style="font-size: 60px; color: #ffff00; text-shadow: 0 0 20px #ff0000;">VICTORY!</h1>
+            <br>
+            <p>You have defeated the CoolOnion Boss!</p>
+            <p>The system is safe... for now.</p>
+            <br>
+            <p style="color: #00ffff">Final Score: ${starState.score + 5000}</p>
+            <br>
+            <p>Press Refresh to play again.</p>
+        `;
+    }, 100);
 }
 
 
@@ -515,6 +521,46 @@ function renderStarfield(timestamp) {
         // Boss Update & Render
         if (starState.boss.active) {
             const b = starState.boss;
+
+            // Handle Dying State
+            if (b.dying) {
+                // Shake effect
+                b.x += (Math.random() - 0.5) * 10;
+                b.y += (Math.random() - 0.5) * 10;
+                
+                // Explosions everywhere
+                if (Math.random() < 0.5) {
+                    const particles = Array.from({ length: 10 }, () => ({
+                        x: b.x + (Math.random() - 0.5) * 200,
+                        y: b.y + (Math.random() - 0.5) * 50,
+                        vx: (Math.random() - 0.5) * 10,
+                        vy: (Math.random() - 0.5) * 10,
+                        life: 0,
+                        max: 30 + Math.random() * 20,
+                        size: 2 + Math.random() * 4,
+                        color: Math.random() < 0.5 ? '#ff00ff' : '#ffff00'
+                    }));
+                    starState.explosions.push(particles);
+                }
+
+                // Draw Boss (Fading/Glitching)
+                ctx.save();
+                ctx.translate(b.x, b.y);
+                const scale = 1 + Math.sin(now * 0.05) * 0.1;
+                ctx.scale(scale, scale);
+                ctx.fillStyle = Math.random() < 0.5 ? b.color : '#fff'; // Flash white
+                ctx.font = 'bold 80px monospace';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('CoolOnion', 0, 0);
+                ctx.restore();
+
+                // Check death timer
+                if (now - b.deathTime > 3000) {
+                    triggerVictory();
+                    return; // Ensure we stop here
+                }
+            } else {
             
             // Move to target Y
             const targetY = 150;
@@ -573,11 +619,15 @@ function renderStarfield(timestamp) {
                     ctx.fillText('CoolOnion', 0, 0);
                     ctx.restore();
     
-                    if (b.hp <= 0) {
-                        triggerVictory();
-                        return;
+                    if (b.hp <= 0 && !b.dying) {
+                        b.dying = true;
+                        b.deathTime = now;
+                        // Clear boss bullets
+                        starState.monsterBullets = [];
+                        break;
                     }
                 }
+            }
             }
         }
     }
@@ -718,12 +768,13 @@ function renderStarfield(timestamp) {
         }
     }
 
-    // Spawn Boss if score >= 100
-    if (starState.score >= 100 && !starState.boss.active && !starState.boss.defeated) {
+    // Spawn Boss if score >= 200
+    if (starState.score >= 200 && !starState.boss.active && !starState.boss.defeated && !starState.boss.dying) {
         starState.boss.active = true;
         starState.boss.x = starState.width / 2;
         starState.boss.y = -100;
-        starState.boss.hp = 200;
+        starState.boss.hp = 50;
+        starState.boss.maxHp = 50;
         starState.boss.nextShot = now + 2000;
     }
 
