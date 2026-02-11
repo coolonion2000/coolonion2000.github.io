@@ -91,6 +91,10 @@ const starState = {
         vx: 0,
         vy: 0
     },
+    monsters: [],
+    nextMonsterTime: 0,
+    bannerText: null, // Will store reference to banner element
+    bannerOriginalContent: '',
     nextShootingStarTime: 0,
     centerX: null,
     centerY: null,
@@ -149,6 +153,24 @@ function createShootingStar() {
     };
 }
 
+function createMonster() {
+    // Start from bottom right
+    const startX = starState.width + 50;
+    const startY = starState.height + 50;
+    
+    return {
+        x: startX,
+        y: startY,
+        vx: 0,
+        vy: 0,
+        size: 12 + Math.random() * 6, // Larger size, similar to ship
+        hp: 1, // Die in 1 hit
+        color: `rgba(${200 + Math.random()*55}, ${200 + Math.random()*55}, ${200 + Math.random()*55}, 0.9)`, // Greyish/White
+        targetOffsetX: Math.random(), // Relative offset in banner
+        targetOffsetY: Math.random()
+    };
+}
+
 function resizeStarfield() {
     const canvas = starState.canvas;
     const ctx = starState.ctx;
@@ -200,6 +222,14 @@ function initStarfield() {
 
     // Initialize shooting star timer
     starState.nextShootingStarTime = performance.now() + 5000 + Math.random() * 55000;
+    
+    // Initialize monster timer
+    starState.nextMonsterTime = performance.now() + 10000; // First monster after 10s
+
+    // Find banner element for eating effect
+    // We need to wait for welcome message to be in DOM, so we'll check in render loop or init
+    // But since welcome message is added by JS, let's just grab the container
+    // We'll search for the ASCII art span dynamically
 
     window.addEventListener('mousemove', (e) => {
         starState.ship.targetX = e.clientX;
@@ -271,6 +301,7 @@ function renderStarfield(timestamp) {
     if (!ctx) return;
     starState.time = timestamp * 0.002;
     ctx.clearRect(0, 0, starState.width, starState.height);
+    const now = performance.now();
 
     // Update and draw ship
     const ship = starState.ship;
@@ -314,6 +345,164 @@ function renderStarfield(timestamp) {
             }
         }
         */
+
+        // Check collision with monsters
+        for (let j = starState.monsters.length - 1; j >= 0; j--) {
+            const m = starState.monsters[j];
+            const dist = Math.hypot(m.x - b.x, m.y - b.y);
+            if (dist < m.size + 5) {
+                // Hit!
+                m.hp--;
+                m.size *= 0.9; // Shrink slightly
+                starState.bullets.splice(i, 1); // Remove bullet
+                
+                // Flash effect
+                m.hitFlash = 5;
+
+                if (m.hp <= 0) {
+                    // Monster destroyed
+                    starState.monsters.splice(j, 1);
+                    
+                    // Explosion
+                    const particles = Array.from({ length: 20 }, () => ({
+                        x: m.x,
+                        y: m.y,
+                        vx: (Math.random() - 0.5) * 5,
+                        vy: (Math.random() - 0.5) * 5,
+                        life: 0,
+                        max: 30 + Math.random() * 20,
+                        size: 2 + Math.random() * 3,
+                        color: m.color
+                    }));
+                    starState.explosions.push(particles);
+                }
+                break; // Bullet hit one monster, stop checking others
+            }
+        }
+    }
+
+    // Spawn and update monsters
+    if (now > starState.nextMonsterTime) {
+        if (starState.monsters.length < 5) { // Max 5 monsters at once
+            starState.monsters.push(createMonster());
+        }
+        starState.nextMonsterTime = now + 5000 + Math.random() * 10000;
+    }
+
+    // Get banner position once per frame
+    if (!starState.bannerText) {
+        starState.bannerText = document.querySelector('.ascii-art');
+        if (starState.bannerText && !starState.bannerOriginalContent) {
+            starState.bannerOriginalContent = starState.bannerText.textContent;
+        }
+    }
+    
+    let targetBaseX = 100;
+    let targetBaseY = 100;
+    let targetW = 300;
+    let targetH = 100;
+
+    if (starState.bannerText) {
+        const rect = starState.bannerText.getBoundingClientRect();
+        targetBaseX = rect.left;
+        targetBaseY = rect.top;
+        targetW = rect.width;
+        targetH = rect.height;
+    }
+
+    for (let i = starState.monsters.length - 1; i >= 0; i--) {
+        const m = starState.monsters[i];
+        
+        // Update target based on current banner position
+        // Use offset to target a specific character area roughly
+        const tx = targetBaseX + m.targetOffsetX * targetW;
+        const ty = targetBaseY + m.targetOffsetY * targetH;
+        
+        const dx = tx - m.x;
+        const dy = ty - m.y;
+        const dist = Math.hypot(dx, dy);
+        
+        // Update velocity to follow banner
+        const speed = 0.5 + Math.random() * 0.5;
+        if (dist > 1) {
+            m.vx = (dx / dist) * speed;
+            m.vy = (dy / dist) * speed;
+        }
+        
+        m.x += m.vx;
+        m.y += m.vy;
+        
+        // Draw monster (Alien/Bug shape)
+        ctx.save();
+        ctx.translate(m.x, m.y);
+        // Rotate slightly towards movement or just wobble
+        const wobble = Math.sin(now * 0.005 + m.x * 0.1) * 0.2;
+        ctx.rotate(Math.atan2(m.vy, m.vx) + Math.PI/2 + wobble); // Face direction of movement (assuming 'up' is forward)
+
+        if (m.hitFlash > 0) {
+            ctx.fillStyle = '#fff';
+            ctx.strokeStyle = '#fff';
+            m.hitFlash--;
+        } else {
+            ctx.fillStyle = m.color;
+            ctx.strokeStyle = m.color;
+        }
+        
+        const s = m.size;
+        ctx.beginPath();
+        // Body (triangle-ish)
+        ctx.moveTo(0, -s/2); // Nose
+        ctx.lineTo(s/2, s/4); // Right corner
+        ctx.lineTo(0, s/2);   // Tail center
+        ctx.lineTo(-s/2, s/4); // Left corner
+        ctx.closePath();
+        ctx.fill();
+
+        // Mandibles/Antennae
+        ctx.beginPath();
+        ctx.moveTo(-s/4, -s/4);
+        ctx.lineTo(-s/2, -s);
+        ctx.moveTo(s/4, -s/4);
+        ctx.lineTo(s/2, -s);
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.restore();
+
+        // Check if reached banner
+        if (dist < 10) {
+            if (starState.bannerText) {
+                // Randomly replace a character with a space
+                const text = starState.bannerText.textContent;
+                if (text.trim().length > 0) {
+                    const indices = [];
+                    for(let k=0; k<text.length; k++) {
+                        if (text[k] !== ' ' && text[k] !== '\n') indices.push(k);
+                    }
+                    if (indices.length > 0) {
+                        const idx = indices[Math.floor(Math.random() * indices.length)];
+                        const chars = text.split('');
+                        chars[idx] = ' '; // Eat it
+                        starState.bannerText.textContent = chars.join('');
+                    }
+                }
+            }
+            
+            starState.monsters.splice(i, 1);
+            
+            // Explosion (greyish for dust)
+            const particles = Array.from({ length: 6 }, () => ({
+                x: m.x,
+                y: m.y,
+                vx: (Math.random() - 0.5) * 2,
+                vy: (Math.random() - 0.5) * 2,
+                life: 0,
+                max: 15,
+                size: 1.5,
+                color: '#ccc'
+            }));
+            starState.explosions.push(particles);
+        }
     }
 
     // Draw ship
@@ -337,7 +526,6 @@ function renderStarfield(timestamp) {
     ctx.restore();
 
     // Periodic shooting star
-    const now = performance.now();
     if (now > starState.nextShootingStarTime) {
         starState.shootingStars.push(createShootingStar());
         starState.nextShootingStarTime = now + 5000 + Math.random() * 55000;
@@ -601,6 +789,11 @@ Type '<span class="highlight">goto github</span>' or '<span class="highlight">go
 
     clear: () => {
         document.getElementById('output').innerHTML = '';
+        appendOutput(welcomeMessage);
+        // Reset banner reference so monsters can find the new element
+        if (typeof starState !== 'undefined') {
+            starState.bannerText = null;
+        }
         return '';
     },
 
