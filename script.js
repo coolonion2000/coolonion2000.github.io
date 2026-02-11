@@ -495,40 +495,51 @@ function renderStarfield(timestamp) {
         m.x += m.vx;
         m.y += m.vy;
         
-        // Draw monster (Alien/Bug shape)
+        // Draw monster (NES Space Invader style)
         ctx.save();
         ctx.translate(m.x, m.y);
         // Rotate slightly towards movement or just wobble
         const wobble = Math.sin(now * 0.005 + m.x * 0.1) * 0.2;
-        ctx.rotate(Math.atan2(m.vy, m.vx) + Math.PI/2 + wobble); // Face direction of movement (assuming 'up' is forward)
+        ctx.rotate(Math.atan2(m.vy, m.vx) + Math.PI/2 + wobble);
 
         if (m.hitFlash > 0) {
             ctx.fillStyle = '#fff';
-            ctx.strokeStyle = '#fff';
             m.hitFlash--;
         } else {
             ctx.fillStyle = m.color;
-            ctx.strokeStyle = m.color;
         }
         
         const s = m.size;
-        ctx.beginPath();
-        // Body (triangle-ish)
-        ctx.moveTo(0, -s/2); // Nose
-        ctx.lineTo(s/2, s/4); // Right corner
-        ctx.lineTo(0, s/2);   // Tail center
-        ctx.lineTo(-s/2, s/4); // Left corner
-        ctx.closePath();
-        ctx.fill();
+        // Pixel art pattern (11x8 grid example)
+        // 00100000100
+        // 00010001000
+        // 00111111100
+        // 01101110110
+        // 11111111111
+        // 10111111101
+        // 10100000101
+        // 00011011000
+        const pattern = [
+            [2,0], [8,0],
+            [3,1], [7,1],
+            [2,2], [3,2], [4,2], [5,2], [6,2], [7,2], [8,2],
+            [1,3], [2,3], [4,3], [5,3], [6,3], [8,3], [9,3],
+            [0,4], [1,4], [2,4], [3,4], [4,4], [5,4], [6,4], [7,4], [8,4], [9,4], [10,4],
+            [0,5], [2,5], [3,5], [4,5], [5,5], [6,5], [7,5], [8,5], [10,5],
+            [0,6], [2,6], [8,6], [10,6],
+            [3,7], [4,7], [6,7], [7,7]
+        ];
+        
+        const pixelSize = s / 11; 
+        // Center the sprite
+        const offsetX = - (11 * pixelSize) / 2;
+        const offsetY = - (8 * pixelSize) / 2;
 
-        // Mandibles/Antennae
         ctx.beginPath();
-        ctx.moveTo(-s/4, -s/4);
-        ctx.lineTo(-s/2, -s);
-        ctx.moveTo(s/4, -s/4);
-        ctx.lineTo(s/2, -s);
-        ctx.lineWidth = 2;
-        ctx.stroke();
+        for (const p of pattern) {
+            ctx.rect(offsetX + p[0] * pixelSize, offsetY + p[1] * pixelSize, pixelSize, pixelSize);
+        }
+        ctx.fill();
 
         ctx.restore();
 
