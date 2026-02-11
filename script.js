@@ -1201,7 +1201,55 @@ const commands = {
   <span class="highlight">theme &lt;name&gt;</span>  - Change theme (default, amber, blue, purple)
   <span class="highlight">fly</span>           - Enter spaceship flight mode
   <span class="highlight">history</span>       - Show command history
+  <span class="highlight">flash &lt;file&gt;</span>  - Play Flash games (requires .swf file)
 `,
+
+    flash: (args) => {
+        const overlay = document.getElementById('flash-overlay');
+        const container = document.getElementById('flash-content');
+        const title = document.getElementById('flash-title');
+        
+        if (!overlay || !container) return '<span class="error">Error: Flash player interface not found.</span>';
+        
+        // Clear previous content
+        container.innerHTML = '';
+        
+        let gameUrl = '';
+        let gameName = 'Flash Game';
+        
+        if (args && args.length > 0) {
+            // Assume argument is filename in games/ folder or full URL
+            const arg = args[0];
+            if (arg.startsWith('http')) {
+                gameUrl = arg;
+                gameName = 'External Game';
+            } else {
+                gameUrl = `games/${arg}`;
+                if (!gameUrl.endsWith('.swf')) gameUrl += '.swf';
+                gameName = arg;
+            }
+        } else {
+             return `<span class="error">Usage: flash &lt;filename&gt;</span>
+<span class="info">Please place .swf files in 'games/' folder.</span>
+<span class="info">Example: flash mario</span>`;
+        }
+        
+        overlay.style.display = 'flex';
+        overlay.classList.remove('hidden');
+        title.textContent = gameName;
+        
+        // Create Ruffle player
+        const ruffle = window.RufflePlayer.newest();
+        const player = ruffle.createPlayer();
+        container.appendChild(player);
+        
+        player.load(gameUrl).catch(e => {
+            console.error(e);
+            container.innerHTML = `<div style="color:red; padding:20px;">Error loading game: ${gameUrl}<br>Make sure the file exists in 'games/' folder.</div>`;
+        });
+        
+        return `<span class="success">Launching Flash Player...</span>`;
+    },
 
     about: () => `
 <span class="success">About Me</span>
@@ -2188,6 +2236,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!terminal) return;
         if (terminal.classList.contains('hidden')) return;
 
+        // If Flash overlay is active, ignore all terminal inputs
+        const flashOverlay = document.getElementById('flash-overlay');
+        if (flashOverlay && !flashOverlay.classList.contains('hidden') && flashOverlay.style.display !== 'none') {
+            return;
+        }
+
         // Allow copy/paste operations (Ctrl+C, Ctrl+V, Ctrl+A, etc.)
         if (e.ctrlKey || e.metaKey) {
             // Only handle Ctrl+L for clear
@@ -2316,4 +2370,21 @@ document.addEventListener('DOMContentLoaded', () => {
         updateInputDisplay();
         scrollToBottom();
     });
+
+    // Handle Flash Overlay Close
+    const closeFlash = document.getElementById('close-flash');
+    if (closeFlash) {
+        closeFlash.addEventListener('click', () => {
+            const overlay = document.getElementById('flash-overlay');
+            const container = document.getElementById('flash-content');
+            if (overlay) {
+                overlay.style.display = 'none';
+                overlay.classList.add('hidden');
+                // Stop the game by clearing content
+                if (container) container.innerHTML = '';
+                // Refocus input
+                focusInput();
+            }
+        });
+    }
 });

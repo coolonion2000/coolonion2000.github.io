@@ -244,3 +244,72 @@ body {
         padding: 10px;
     }
 }
+
+/* Flash Overlay */
+.overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.85);
+    z-index: 100;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    backdrop-filter: blur(5px);
+}
+
+.overlay.hidden {
+    display: none;
+}
+
+.flash-container {
+    background: #111;
+    border: 2px solid var(--text-color);
+    box-shadow: 0 0 20px rgba(0, 255, 0, 0.2);
+    padding: 10px;
+    width: 800px;
+    height: 600px;
+    max-width: 95vw;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.flash-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px dashed var(--text-dim);
+    font-family: var(--font-mono);
+    flex-shrink: 0;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    color: var(--error-color);
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 16px;
+}
+
+.close-btn:hover {
+    text-shadow: 0 0 5px var(--error-color);
+}
+
+#flash-content {
+    width: 100%;
+    height: 100%;
+    background: #000;
+    flex-grow: 1;
+    position: relative;
+}
+
+#flash-content ruffle-player {
+    width: 100%;
+    height: 100%;
+}
