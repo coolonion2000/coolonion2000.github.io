@@ -96,6 +96,10 @@ const starState = {
     bannerText: null, // Will store reference to banner element
     bannerOriginalContent: '',
     nextShootingStarTime: 0,
+    keys: { w: false, a: false, s: false, d: false },
+    mouseX: 0,
+    mouseY: 0,
+    lastShotTime: 0,
     centerX: null,
     centerY: null,
     width: 0,
@@ -232,8 +236,22 @@ function initStarfield() {
     // We'll search for the ASCII art span dynamically
 
     window.addEventListener('mousemove', (e) => {
-        starState.ship.targetX = e.clientX;
-        starState.ship.targetY = e.clientY;
+        starState.mouseX = e.clientX;
+        starState.mouseY = e.clientY;
+        
+        if (!gameState.active || gameState.type !== 'fly') {
+            starState.ship.targetX = e.clientX;
+            starState.ship.targetY = e.clientY;
+        }
+    });
+
+    window.addEventListener('keyup', (e) => {
+        if (gameState.active && gameState.type === 'fly') {
+            const key = e.key.toLowerCase();
+            if (starState.keys.hasOwnProperty(key)) {
+                starState.keys[key] = false;
+            }
+        }
     });
 
     document.addEventListener('click', (e) => {
@@ -243,25 +261,40 @@ function initStarfield() {
         // Fire bullet
         const ship = starState.ship;
         const speed = 12;
+        let angle;
+
+        if (gameState.active && gameState.type === 'fly') {
+            // Shoot towards mouse
+            angle = Math.atan2(starState.mouseY - ship.y, starState.mouseX - ship.x);
+            // Update ship angle to face shooting direction
+            ship.angle = angle;
+            starState.lastShotTime = performance.now();
+        } else {
+            angle = ship.angle;
+        }
+
         starState.bullets.push({
             x: ship.x,
             y: ship.y,
-            vx: Math.cos(ship.angle) * speed,
-            vy: Math.sin(ship.angle) * speed,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
             life: 0,
             maxLife: 100
         });
 
-        for (const s of starState.stars) {
-            const dx = s.x - x;
-            const dy = s.y - y;
-            s.radius = Math.hypot(dx, dy);
-            s.angle = Math.atan2(dy, dx);
-            s.trail = []; // Clear trail on center change to avoid artifacts
+        // Only warp stars if NOT in fly mode
+        if (!gameState.active || gameState.type !== 'fly') {
+            for (const s of starState.stars) {
+                const dx = s.x - x;
+                const dy = s.y - y;
+                s.radius = Math.hypot(dx, dy);
+                s.angle = Math.atan2(dy, dx);
+                s.trail = []; // Clear trail on center change to avoid artifacts
+            }
+            
+            starState.centerX = x;
+            starState.centerY = y;
         }
-        
-        starState.centerX = x;
-        starState.centerY = y;
 
         let hitIndex = -1;
         let hitDist = 10;
@@ -305,16 +338,46 @@ function renderStarfield(timestamp) {
 
     // Update and draw ship
     const ship = starState.ship;
-    // Lerp position
-    ship.x += (ship.targetX - ship.x) * 0.1;
-    ship.y += (ship.targetY - ship.y) * 0.1;
     
-    // Calculate angle based on movement
-    const dx = ship.targetX - ship.x;
-    const dy = ship.targetY - ship.y;
-    // Only update angle if moving significantly
-    if (Math.hypot(dx, dy) > 1) {
-        ship.angle = Math.atan2(dy, dx);
+    if (gameState.active && gameState.type === 'fly') {
+        const speed = 5;
+        if (starState.keys.w) ship.y -= speed;
+        if (starState.keys.s) ship.y += speed;
+        if (starState.keys.a) ship.x -= speed;
+        if (starState.keys.d) ship.x += speed;
+
+        // Clamp to screen
+        ship.x = Math.max(0, Math.min(starState.width, ship.x));
+        ship.y = Math.max(0, Math.min(starState.height, ship.y));
+
+        // Sync targetX/Y to avoid lerp jump when exiting
+        ship.targetX = ship.x;
+        ship.targetY = ship.y;
+
+        // Angle follows movement direction
+        const vx = (starState.keys.d ? 1 : 0) - (starState.keys.a ? 1 : 0);
+        const vy = (starState.keys.s ? 1 : 0) - (starState.keys.w ? 1 : 0);
+        
+        if (vx !== 0 || vy !== 0) {
+            // Only update angle from movement if we haven't shot recently (e.g., 300ms)
+            if (now - starState.lastShotTime > 300) {
+                ship.angle = Math.atan2(vy, vx);
+            }
+        }
+        
+        // Do NOT update centerX/centerY to prevent background from moving with ship
+    } else {
+        // Lerp position
+        ship.x += (ship.targetX - ship.x) * 0.1;
+        ship.y += (ship.targetY - ship.y) * 0.1;
+        
+        // Calculate angle based on movement
+        const dx = ship.targetX - ship.x;
+        const dy = ship.targetY - ship.y;
+        // Only update angle if moving significantly
+        if (Math.hypot(dx, dy) > 1) {
+            ship.angle = Math.atan2(dy, dx);
+        }
     }
 
     // Draw bullets
@@ -759,6 +822,7 @@ const commands = {
   <span class="highlight">date</span>          - Show current date and time
   <span class="highlight">whoami</span>        - Who am I?
   <span class="highlight">theme &lt;name&gt;</span>  - Change theme (default, amber, blue, purple)
+  <span class="highlight">fly</span>           - Enter spaceship flight mode
   <span class="highlight">history</span>       - Show command history
 `,
 
@@ -979,6 +1043,20 @@ Type '<span class="highlight">quit</span>' to exit the game.
 
         return `<span class="error">Unknown game: ${gameName}</span>
 Available games: guess, rps, wordle, hangman, maze`;
+    },
+
+    fly: () => {
+        gameState.active = true;
+        gameState.type = 'fly';
+        // Reset keys
+        starState.keys = { w: false, a: false, s: false, d: false };
+        return `<span class="success">🚀 Flight Mode Activated!</span>
+<span class="info">──────────────────────────────────────</span>
+Use <span class="highlight">W/A/S/D</span> to move the ship.
+Use <span class="highlight">Mouse</span> to aim.
+<span class="highlight">Click</span> to fire.
+Press <span class="highlight">Q</span> or <span class="highlight">ESC</span> to exit flight mode.
+`;
     },
 
     sl: () => {
@@ -1747,6 +1825,27 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         focusInput();
+
+        // If in flight mode, handle WASD and Q/ESC
+        if (gameState.active && gameState.type === 'fly') {
+            const key = e.key.toLowerCase();
+            if (['w', 'a', 's', 'd'].includes(key)) {
+                e.preventDefault();
+                starState.keys[key] = true;
+                return;
+            }
+            if (key === 'q' || key === 'escape') {
+                e.preventDefault();
+                gameState.active = false;
+                starState.keys = { w: false, a: false, s: false, d: false }; // Reset keys
+                appendOutput(`<span class="info">Flight mode deactivated.</span>`);
+                scrollToBottom();
+                return;
+            }
+            // Block other inputs to prevent typing
+            e.preventDefault();
+            return;
+        }
 
         // If in maze game, handle WASD immediately without Enter
         if (gameState.active && gameState.type === 'maze') {
