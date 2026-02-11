@@ -81,6 +81,16 @@ const starState = {
     stars: [],
     explosions: [],
     shootingStars: [],
+    bullets: [],
+    ship: {
+        x: 0,
+        y: 0,
+        targetX: 0,
+        targetY: 0,
+        angle: -Math.PI / 2,
+        vx: 0,
+        vy: 0
+    },
     nextShootingStarTime: 0,
     centerX: null,
     centerY: null,
@@ -153,6 +163,15 @@ function resizeStarfield() {
         starState.centerX = Math.max(0, Math.min(starState.width, starState.centerX));
         starState.centerY = Math.max(0, Math.min(starState.height, starState.centerY));
     }
+    
+    // Reset ship position to center if it's off (or init)
+    if (starState.ship.x === 0 && starState.ship.y === 0) {
+        starState.ship.x = starState.width / 2;
+        starState.ship.y = starState.height / 2;
+        starState.ship.targetX = starState.width / 2;
+        starState.ship.targetY = starState.height / 2;
+    }
+
     canvas.width = starState.width * dpr;
     canvas.height = starState.height * dpr;
     canvas.style.width = `${starState.width}px`;
@@ -182,10 +201,27 @@ function initStarfield() {
     // Initialize shooting star timer
     starState.nextShootingStarTime = performance.now() + 5000 + Math.random() * 55000;
 
+    window.addEventListener('mousemove', (e) => {
+        starState.ship.targetX = e.clientX;
+        starState.ship.targetY = e.clientY;
+    });
+
     document.addEventListener('click', (e) => {
         const x = e.clientX;
         const y = e.clientY;
         
+        // Fire bullet
+        const ship = starState.ship;
+        const speed = 12;
+        starState.bullets.push({
+            x: ship.x,
+            y: ship.y,
+            vx: Math.cos(ship.angle) * speed,
+            vy: Math.sin(ship.angle) * speed,
+            life: 0,
+            maxLife: 100
+        });
+
         for (const s of starState.stars) {
             const dx = s.x - x;
             const dy = s.y - y;
@@ -235,6 +271,70 @@ function renderStarfield(timestamp) {
     if (!ctx) return;
     starState.time = timestamp * 0.002;
     ctx.clearRect(0, 0, starState.width, starState.height);
+
+    // Update and draw ship
+    const ship = starState.ship;
+    // Lerp position
+    ship.x += (ship.targetX - ship.x) * 0.1;
+    ship.y += (ship.targetY - ship.y) * 0.1;
+    
+    // Calculate angle based on movement
+    const dx = ship.targetX - ship.x;
+    const dy = ship.targetY - ship.y;
+    // Only update angle if moving significantly
+    if (Math.hypot(dx, dy) > 1) {
+        ship.angle = Math.atan2(dy, dx);
+    }
+
+    // Draw bullets
+    ctx.fillStyle = '#0f0';
+    for (let i = starState.bullets.length - 1; i >= 0; i--) {
+        const b = starState.bullets[i];
+        b.x += b.vx;
+        b.y += b.vy;
+        b.life++;
+        
+        if (b.life > b.maxLife || b.x < 0 || b.x > starState.width || b.y < 0 || b.y > starState.height) {
+            starState.bullets.splice(i, 1);
+            continue;
+        }
+
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, 2, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Check collision with stars
+        // (Optional: if we want bullets to destroy stars too)
+        /*
+        for (let j = starState.stars.length - 1; j >= 0; j--) {
+            const s = starState.stars[j];
+            const dist = Math.hypot(s.x - b.x, s.y - b.y);
+            if (dist < s.size * 10) { // generous hit box
+                 // trigger explosion...
+            }
+        }
+        */
+    }
+
+    // Draw ship
+    ctx.save();
+    ctx.translate(ship.x, ship.y);
+    ctx.rotate(ship.angle);
+    ctx.fillStyle = '#ccc';
+    ctx.beginPath();
+    // Simple paper airplane shape
+    ctx.moveTo(10, 0);
+    ctx.lineTo(-6, 6);
+    ctx.lineTo(-2, 0);
+    ctx.lineTo(-6, -6);
+    ctx.closePath();
+    ctx.fill();
+    // Engine glow
+    ctx.fillStyle = `rgba(100, 200, 255, ${0.5 + Math.random() * 0.5})`;
+    ctx.beginPath();
+    ctx.arc(-6, 0, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
 
     // Periodic shooting star
     const now = performance.now();
@@ -321,6 +421,28 @@ function renderStarfield(timestamp) {
             ctx.beginPath();
             ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
             ctx.fill();
+        }
+    }
+
+    // Draw constellations (lines between nearby stars)
+    ctx.lineWidth = 0.5;
+    const connectDistance = 100;
+    for (let i = 0; i < starState.stars.length; i++) {
+        for (let j = i + 1; j < starState.stars.length; j++) {
+            const s1 = starState.stars[i];
+            const s2 = starState.stars[j];
+            const dx = s1.x - s2.x;
+            const dy = s1.y - s2.y;
+            const dist = Math.hypot(dx, dy);
+
+            if (dist < connectDistance) {
+                const alpha = (1 - dist / connectDistance) * 0.3; // Low opacity
+                ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
+                ctx.beginPath();
+                ctx.moveTo(s1.x, s1.y);
+                ctx.lineTo(s2.x, s2.y);
+                ctx.stroke();
+            }
         }
     }
 
@@ -449,6 +571,7 @@ const commands = {
   <span class="highlight">date</span>          - Show current date and time
   <span class="highlight">whoami</span>        - Who am I?
   <span class="highlight">theme &lt;name&gt;</span>  - Change theme (default, amber, blue, purple)
+  <span class="highlight">history</span>       - Show command history
 `,
 
     about: () => `
@@ -668,6 +791,20 @@ Available games: guess, rps, wordle, hangman, maze`;
     sl: () => {
         runSl();
         return '';
+    },
+
+    sudo: () => {
+        return `<span class="error">Permission denied: user is not in the sudoers file. This incident will be reported.</span>
+<span class="info">(Nice try, but you have no power here!)</span>`;
+    },
+
+    history: () => {
+        if (commandHistory.length === 0) {
+            return `<span class="info">No history yet.</span>`;
+        }
+        return commandHistory.map((cmd, i) => 
+            `<div class="line"><span class="info">${(i + 1).toString().padStart(4, ' ')}</span>  <span class="highlight">${escapeHtml(cmd)}</span></div>`
+        ).join('');
     }
 };
 
@@ -1395,6 +1532,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 commands.clear();
             }
             // Let other Ctrl combinations work normally (copy, paste, etc.)
+            return;
+        }
+
+        if (e.key === 'Tab') {
+            e.preventDefault();
+            const current = currentInput.toLowerCase();
+            if (!current || current.includes(' ')) return;
+
+            const matches = Object.keys(commands).filter(cmd => cmd.startsWith(current)).sort();
+            if (matches.length === 1) {
+                currentInput = matches[0] + ' ';
+                updateInputDisplay();
+            } else if (matches.length > 1) {
+                appendCommand(currentInput);
+                const list = matches.map(c => `<span class="highlight">${c}</span>`).join('  ');
+                appendOutput(list);
+                scrollToBottom();
+            }
             return;
         }
 
