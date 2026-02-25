@@ -1230,8 +1230,10 @@ const commands = {
             }
         } else {
              return `<span class="error">Usage: flash &lt;filename&gt;</span>
-<span class="info">Please place .swf files in 'games/' folder.</span>
-<span class="info">Example: flash mario</span>`;
+<span class="info">Available games:</span>
+<span class="highlight">  • dadnme</span>     - Dad 'n Me
+<span class="highlight">  • thegungame</span> - The Gun Game
+<span class="info">Example: flash dadnme</span>`;
         }
         
         overlay.style.display = 'flex';
