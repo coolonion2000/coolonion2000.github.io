@@ -35,6 +35,23 @@ const welcomeMessage = `
 <span class="info">Type '<span class="highlight">help</span>' to see available commands.</span>
 `;
 
+const idleMessages = [
+    '祝我好运！',
+    '欢迎回来，指挥官！',
+    '我还以为你走了呢...',
+    '终于回来了！任务继续！',
+    '系统检测到生命体征恢复',
+    '鼠标已重新上线',
+    '操作员，你错过了好几颗流星',
+    '待机模式解除',
+    '正在恢复连接...',
+    '长时间未操作，建议休息一下',
+    '想我了吗？',
+    '别走，还有 bug 要修呢',
+    '你回来啦！差点以为你去摸鱼了',
+    '宇宙很大，但你回来了',
+];
+
 const themeNames = ['default', 'amber', 'blue', 'purple'];
 const defaultGithubUser = 'coolonion2000';
 
@@ -114,6 +131,15 @@ const starState = {
     mouseX: 0,
     mouseY: 0,
     lastShotTime: 0,
+    lastMouseMoveTime: 0,
+    autopilot: {
+        active: false,
+        activatedTime: 0,
+        speechTimer: 0,
+        speechText: '',
+        nextFireTime: 0,
+        targetMonster: null
+    },
     centerX: null,
     centerY: null,
     width: 0,
@@ -381,10 +407,29 @@ function initStarfield() {
     // But since welcome message is added by JS, let's just grab the container
     // We'll search for the ASCII art span dynamically
 
+    starState.lastMouseMoveTime = performance.now();
+
     window.addEventListener('mousemove', (e) => {
         starState.mouseX = e.clientX;
         starState.mouseY = e.clientY;
-        
+
+        const now = performance.now();
+        const idleMs = now - starState.lastMouseMoveTime;
+        starState.lastMouseMoveTime = now;
+
+        if (idleMs > 60000) {
+            const msg = idleMessages[Math.floor(Math.random() * idleMessages.length)];
+            starState.autopilot.speechText = msg;
+            starState.autopilot.speechTimer = now;
+            if (starState.autopilot.active) {
+                starState.autopilot.active = false;
+            }
+        } else if (starState.autopilot.active) {
+            starState.autopilot.active = false;
+            starState.autopilot.speechText = '欢迎回来，指挥官！';
+            starState.autopilot.speechTimer = now;
+        }
+
         if (!gameState.active || gameState.type !== 'fly') {
             starState.ship.targetX = e.clientX;
             starState.ship.targetY = e.clientY;
@@ -663,15 +708,70 @@ function renderStarfield(timestamp) {
         
         // Do NOT update centerX/centerY to prevent background from moving with ship
     } else {
+        const idleMs = now - starState.lastMouseMoveTime;
+        const ap = starState.autopilot;
+
+        if (idleMs > 10000 && !ap.active && starState.monsters.length > 0) {
+            ap.active = true;
+            ap.activatedTime = now;
+            ap.speechText = '操作员已失联，我将自主完成本次收尾任务';
+            ap.speechTimer = now;
+            ap.nextFireTime = now + 500;
+            ap.targetMonster = null;
+        }
+
+        if (ap.active) {
+            let target = null;
+            let closestDist = Infinity;
+            for (const m of starState.monsters) {
+                const d = Math.hypot(m.x - ship.x, m.y - ship.y);
+                if (d < closestDist) {
+                    closestDist = d;
+                    target = m;
+                }
+            }
+            ap.targetMonster = target;
+
+            if (target) {
+                const dx = target.x - ship.x;
+                const dy = target.y - ship.y;
+                const dist = Math.hypot(dx, dy);
+                ship.angle = Math.atan2(dy, dx);
+
+                const desiredDist = 120;
+                if (dist > desiredDist) {
+                    ship.targetX = ship.x + (dx / dist) * 3;
+                    ship.targetY = ship.y + (dy / dist) * 3;
+                } else {
+                    ship.targetX = ship.x - (dx / dist) * 1.5;
+                    ship.targetY = ship.y - (dy / dist) * 1.5;
+                }
+
+                ship.targetX = Math.max(20, Math.min(starState.width - 20, ship.targetX));
+                ship.targetY = Math.max(20, Math.min(starState.height - 20, ship.targetY));
+
+                if (now > ap.nextFireTime) {
+                    const bulletSpeed = 12;
+                    starState.bullets.push({
+                        x: ship.x,
+                        y: ship.y,
+                        vx: Math.cos(ship.angle) * bulletSpeed,
+                        vy: Math.sin(ship.angle) * bulletSpeed,
+                        life: 0,
+                        maxLife: 100
+                    });
+                    ap.nextFireTime = now + 300 + Math.random() * 200;
+                }
+            }
+        }
+
         // Lerp position
         ship.x += (ship.targetX - ship.x) * 0.1;
         ship.y += (ship.targetY - ship.y) * 0.1;
         
-        // Calculate angle based on movement
         const dx = ship.targetX - ship.x;
         const dy = ship.targetY - ship.y;
-        // Only update angle if moving significantly
-        if (Math.hypot(dx, dy) > 1) {
+        if (!ap.active && Math.hypot(dx, dy) > 1) {
             ship.angle = Math.atan2(dy, dx);
         }
     }
@@ -949,9 +1049,8 @@ function renderStarfield(timestamp) {
     ctx.save();
     ctx.translate(ship.x, ship.y);
     ctx.rotate(ship.angle);
-    ctx.fillStyle = '#ccc';
+    ctx.fillStyle = starState.autopilot.active ? '#55ffff' : '#ccc';
     ctx.beginPath();
-    // Simple paper airplane shape
     ctx.moveTo(10, 0);
     ctx.lineTo(-6, 6);
     ctx.lineTo(-2, 0);
@@ -959,11 +1058,65 @@ function renderStarfield(timestamp) {
     ctx.closePath();
     ctx.fill();
     // Engine glow
-    ctx.fillStyle = `rgba(100, 200, 255, ${0.5 + Math.random() * 0.5})`;
+    const glowColor = starState.autopilot.active ? '55, 255, 255' : '100, 200, 255';
+    ctx.fillStyle = `rgba(${glowColor}, ${0.5 + Math.random() * 0.5})`;
     ctx.beginPath();
-    ctx.arc(-6, 0, 3, 0, Math.PI * 2);
+    ctx.arc(-6, 0, starState.autopilot.active ? 4 : 3, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
+
+    // Draw speech bubble
+    const ap = starState.autopilot;
+    if (ap.speechText && ap.speechTimer > 0) {
+        const elapsed = now - ap.speechTimer;
+        const duration = 4000;
+        if (elapsed < duration) {
+            const alpha = elapsed < 500 ? elapsed / 500 : (elapsed > duration - 800 ? (duration - elapsed) / 800 : 1);
+            ctx.save();
+            ctx.globalAlpha = alpha;
+            ctx.font = '13px monospace';
+            const text = ap.speechText;
+            const metrics = ctx.measureText(text);
+            const tw = metrics.width;
+            const th = 18;
+            const padX = 10;
+            const padY = 6;
+            const bx = ship.x - tw / 2 - padX;
+            const by = ship.y - 35 - th - padY * 2;
+            const bw = tw + padX * 2;
+            const bh = th + padY * 2;
+
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            ctx.strokeStyle = ap.active ? '#55ffff' : '#00ff00';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.roundRect(bx, by, bw, bh, 6);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(ship.x - 5, by + bh);
+            ctx.lineTo(ship.x, by + bh + 8);
+            ctx.lineTo(ship.x + 5, by + bh);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(ship.x - 5, by + bh);
+            ctx.lineTo(ship.x, by + bh + 8);
+            ctx.lineTo(ship.x + 5, by + bh);
+            ctx.strokeStyle = ap.active ? '#55ffff' : '#00ff00';
+            ctx.stroke();
+
+            ctx.fillStyle = ap.active ? '#55ffff' : '#00ff00';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, ship.x, by + bh / 2);
+            ctx.restore();
+        } else {
+            ap.speechText = '';
+            ap.speechTimer = 0;
+        }
+    }
 
     // Periodic shooting star
     if (now > starState.nextShootingStarTime) {
@@ -2237,6 +2390,38 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const hiddenInput = document.getElementById('hidden-input');
 
+    // IME composition support for Chinese/Japanese/Korean input
+    let isComposing = false;
+    let charAddedBeforeComposition = false;
+
+    hiddenInput.addEventListener('compositionstart', () => {
+        isComposing = true;
+        if (charAddedBeforeComposition && cursorPosition > 0) {
+            currentInput = currentInput.slice(0, cursorPosition - 1) + currentInput.slice(cursorPosition);
+            cursorPosition--;
+            updateInputDisplay();
+        }
+        charAddedBeforeComposition = false;
+    });
+
+    hiddenInput.addEventListener('compositionend', (e) => {
+        isComposing = false;
+        const text = e.data || '';
+        if (text) {
+            currentInput = currentInput.slice(0, cursorPosition) + text + currentInput.slice(cursorPosition);
+            cursorPosition += text.length;
+            updateInputDisplay();
+            scrollToBottom();
+        }
+        hiddenInput.value = '';
+    });
+
+    hiddenInput.addEventListener('input', () => {
+        if (!isComposing) {
+            hiddenInput.value = '';
+        }
+    });
+
     // Handle keyboard input
     document.addEventListener('keydown', (e) => {
         // If Flash overlay is active, ignore all terminal inputs
@@ -2329,6 +2514,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        // During IME composition, let the IME handle all input
+        if (e.isComposing || isComposing) {
+            return;
+        }
+
         if (e.key === 'Enter') {
             e.preventDefault();
             executeCommand(currentInput);
@@ -2390,6 +2580,7 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             currentInput = currentInput.slice(0, cursorPosition) + e.key + currentInput.slice(cursorPosition);
             cursorPosition++;
+            charAddedBeforeComposition = true;
             updateInputDisplay();
         }
 
