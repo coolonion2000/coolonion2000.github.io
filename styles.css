@@ -216,13 +216,17 @@ body {
     white-space: nowrap;
 }
 
-#input-display {
+#input-display,
+#input-display-after {
     color: #ffffff;
     white-space: pre;
 }
 
 .cursor {
-    color: var(--text-color);
+    display: inline-block;
+    min-width: 1ch;
+    color: var(--bg-color, #0c0c0c);
+    background-color: var(--text-color);
     animation: blink 1s step-end infinite;
 }
 

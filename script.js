@@ -2001,6 +2001,7 @@ function runSl() {
 
 // State
 let currentInput = '';
+let cursorPosition = 0;
 let commandHistory = [];
 let historyIndex = -1;
 let waitingForBootEnter = false;
@@ -2041,35 +2042,6 @@ function finishBoot() {
 
         // Focus hidden input
         focusInput();
-
-        // Allow copy/paste operations (Ctrl+C, Ctrl+V, Ctrl+A, etc.)
-        if (e.ctrlKey || e.metaKey) {
-            // Only handle Ctrl+L for clear
-            if (e.key === 'l') {
-                e.preventDefault();
-                commands.clear();
-            }
-            // Let other Ctrl combinations work normally (copy, paste, etc.)
-            return;
-        }
-
-        if (e.key === 'Tab') {
-            e.preventDefault();
-            const current = currentInput.toLowerCase();
-            if (!current || current.includes(' ')) return;
-
-            const matches = Object.keys(commands).filter(cmd => cmd.startsWith(current)).sort();
-            if (matches.length === 1) {
-                currentInput = matches[0] + ' ';
-                updateInputDisplay();
-            } else if (matches.length > 1) {
-                appendCommand(currentInput);
-                const list = matches.map(c => `<span class="highlight">${c}</span>`).join('  ');
-                appendOutput(list);
-                scrollToBottom();
-            }
-            return;
-        }
     }, 300);
 }
 
@@ -2112,7 +2084,17 @@ function appendCommand(cmd) {
 
 function updateInputDisplay() {
     const display = document.getElementById('input-display');
-    display.textContent = currentInput;
+    const cursorEl = document.querySelector('.cursor');
+    const displayAfter = document.getElementById('input-display-after');
+
+    display.textContent = currentInput.slice(0, cursorPosition);
+    if (cursorPosition < currentInput.length) {
+        cursorEl.textContent = currentInput[cursorPosition];
+        if (displayAfter) displayAfter.textContent = currentInput.slice(cursorPosition + 1);
+    } else {
+        cursorEl.textContent = '\u00A0';
+        if (displayAfter) displayAfter.textContent = '';
+    }
 }
 
 function maybeBazinga() {
@@ -2153,6 +2135,7 @@ function executeCommand(input) {
     // If empty, just show new prompt
     if (!trimmed) {
         currentInput = '';
+        cursorPosition = 0;
         updateInputDisplay();
         return;
     }
@@ -2162,12 +2145,14 @@ function executeCommand(input) {
         const result = processGameInput(trimmed);
         if (result) appendOutput(result);
         currentInput = '';
+        cursorPosition = 0;
         updateInputDisplay();
         return;
     }
 
     if (maybeBazinga()) {
         currentInput = '';
+        cursorPosition = 0;
         updateInputDisplay();
         return;
     }
@@ -2200,6 +2185,7 @@ Type '<span class="highlight">help</span>' for available commands.`;
 
     // Clear input
     currentInput = '';
+    cursorPosition = 0;
     updateInputDisplay();
 }
 
@@ -2273,18 +2259,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!terminal) return;
         if (terminal.classList.contains('hidden')) return;
 
-        focusInput();
-
         // Allow copy/paste operations (Ctrl+C, Ctrl+V, Ctrl+A, etc.)
         if (e.ctrlKey || e.metaKey) {
-            // Only handle Ctrl+L for clear
             if (e.key === 'l') {
                 e.preventDefault();
                 commands.clear();
             }
-            // Let other Ctrl combinations work normally (copy, paste, etc.)
             return;
         }
+
+        focusInput();
 
         if (e.key === 'Tab') {
             e.preventDefault();
@@ -2294,6 +2278,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const matches = Object.keys(commands).filter(cmd => cmd.startsWith(current)).sort();
             if (matches.length === 1) {
                 currentInput = matches[0] + ' ';
+                cursorPosition = currentInput.length;
                 updateInputDisplay();
             } else if (matches.length > 1) {
                 appendCommand(currentInput);
@@ -2349,13 +2334,43 @@ document.addEventListener('DOMContentLoaded', () => {
             executeCommand(currentInput);
         } else if (e.key === 'Backspace') {
             e.preventDefault();
-            currentInput = currentInput.slice(0, -1);
+            if (cursorPosition > 0) {
+                currentInput = currentInput.slice(0, cursorPosition - 1) + currentInput.slice(cursorPosition);
+                cursorPosition--;
+                updateInputDisplay();
+            }
+        } else if (e.key === 'Delete') {
+            e.preventDefault();
+            if (cursorPosition < currentInput.length) {
+                currentInput = currentInput.slice(0, cursorPosition) + currentInput.slice(cursorPosition + 1);
+                updateInputDisplay();
+            }
+        } else if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            if (cursorPosition > 0) {
+                cursorPosition--;
+                updateInputDisplay();
+            }
+        } else if (e.key === 'ArrowRight') {
+            e.preventDefault();
+            if (cursorPosition < currentInput.length) {
+                cursorPosition++;
+                updateInputDisplay();
+            }
+        } else if (e.key === 'Home') {
+            e.preventDefault();
+            cursorPosition = 0;
+            updateInputDisplay();
+        } else if (e.key === 'End') {
+            e.preventDefault();
+            cursorPosition = currentInput.length;
             updateInputDisplay();
         } else if (e.key === 'ArrowUp') {
             e.preventDefault();
             if (historyIndex > 0) {
                 historyIndex--;
                 currentInput = commandHistory[historyIndex];
+                cursorPosition = currentInput.length;
                 updateInputDisplay();
             }
         } else if (e.key === 'ArrowDown') {
@@ -2363,15 +2378,18 @@ document.addEventListener('DOMContentLoaded', () => {
             if (historyIndex < commandHistory.length - 1) {
                 historyIndex++;
                 currentInput = commandHistory[historyIndex];
+                cursorPosition = currentInput.length;
                 updateInputDisplay();
             } else {
                 historyIndex = commandHistory.length;
                 currentInput = '';
+                cursorPosition = 0;
                 updateInputDisplay();
             }
         } else if (e.key.length === 1) {
             e.preventDefault();
-            currentInput += e.key;
+            currentInput = currentInput.slice(0, cursorPosition) + e.key + currentInput.slice(cursorPosition);
+            cursorPosition++;
             updateInputDisplay();
         }
 
@@ -2401,9 +2419,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         e.preventDefault();
         const text = (e.clipboardData || window.clipboardData).getData('text');
-        // Only take the first line if multiple lines pasted
         const firstLine = text.split('\n')[0].trim();
-        currentInput += firstLine;
+        currentInput = currentInput.slice(0, cursorPosition) + firstLine + currentInput.slice(cursorPosition);
+        cursorPosition += firstLine.length;
         updateInputDisplay();
         scrollToBottom();
     });
