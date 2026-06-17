@@ -1502,13 +1502,13 @@ Available topics: tantan, cosmo`;
         }
 
         if (topic === 'cosmo') {
-            // "WO YU 2026.3.11 HAO RUZHI COSMO" in Morse code
+            // "I JOINED COSMO ON 2026 03 11" in Morse code
             return `
 <span class="info">╔════════════════════════════════════════╗</span>
 <span class="info">║</span>  <span class="highlight">🔐 ENCRYPTED MESSAGE</span>                  <span class="info">║</span>
 <span class="info">╚════════════════════════════════════════╝</span>
 
-<span class="success">.-- --- / -.-- ..- / ..--- ----- ..--- -.... .-.-.- ...-- .-.-.- .---- .---- / .... .- --- / .-. ..- --.. .... .. / -.-. --- ... -- ---</span>
+<span class="success">.. / .--- --- .. -. . -.. / -.-. --- ... -- --- / --- -. / ..--- ----- ..--- -.... / ----- ...-- / .---- .----</span>
 `;
         }
 
