@@ -1485,7 +1485,7 @@ Available: ${themeNames.join(', ')}`;
     puzzle: (args) => {
         if (!args || args.length === 0) {
             return `<span class="error">Usage: puzzle &lt;topic&gt;</span>
-Available topics: tantan`;
+Available topics: tantan, cosmo`;
         }
 
         const topic = args[0].toLowerCase();
@@ -1501,8 +1501,19 @@ Available topics: tantan`;
 `;
         }
 
+        if (topic === 'cosmo') {
+            // "WO YU 2026.3.11 HAO RUZHI COSMO" in Morse code
+            return `
+<span class="info">╔════════════════════════════════════════╗</span>
+<span class="info">║</span>  <span class="highlight">🔐 ENCRYPTED MESSAGE</span>                  <span class="info">║</span>
+<span class="info">╚════════════════════════════════════════╝</span>
+
+<span class="success">.-- --- / -.-- ..- / ..--- ----- ..--- -.... .-.-.- ...-- .-.-.- .---- .---- / .... .- --- / .-. ..- --.. .... .. / -.-. --- ... -- ---</span>
+`;
+        }
+
         return `<span class="error">Unknown topic: ${topic}</span>
-Available topics: tantan`;
+Available topics: tantan, cosmo`;
     },
 
     goto: (args) => {
